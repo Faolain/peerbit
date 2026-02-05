@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0](https://github.com/Faolain/peerbit/compare/any-store-proxy-v1.0.4...any-store-proxy-v1.1.0) (2026-02-05)
+
+
+### Features
+
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/any-store-interface bumped to 1.2.0
+    * @peerbit/canonical-client bumped to 1.2.0
+    * @peerbit/canonical-host bumped to 1.1.0
+
 ## [1.0.4](https://github.com/dao-xyz/peerbit/compare/any-store-proxy-v1.0.3...any-store-proxy-v1.0.4) (2026-01-27)
 
 

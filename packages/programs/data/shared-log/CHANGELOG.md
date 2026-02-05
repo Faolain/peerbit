@@ -389,6 +389,85 @@
   * devDependencies
     * @peerbit/test-utils bumped from ^2.0.31 to ^2.0.32
 
+## [13.0.0](https://github.com/Faolain/peerbit/compare/shared-log-v12.3.5...shared-log-v13.0.0) (2026-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* use variants for inline types and and enfore variants for indexed types
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* delivery options for ops ([921fd05](https://github.com/Faolain/peerbit/commit/921fd052b452e3d67583f54f2b815eebda6181e1))
+* improve waitForReplicator functionality to support eager options ([b17572b](https://github.com/Faolain/peerbit/commit/b17572bae447104d60b47dc19dde356f168bb9f3))
+* make keychain libp2p compatible ([00aecf1](https://github.com/Faolain/peerbit/commit/00aecf1be807368b11800948cbc92ca03f8eb5c4))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* **shared-log:** add sync prioritization options ([fee5046](https://github.com/Faolain/peerbit/commit/fee504636bd9900dda876499170087444c2b763a))
+* **shared-log:** make waitForReplicator request loop configurable ([e0f68cd](https://github.com/Faolain/peerbit/commit/e0f68cd4def66b8a296ddbfd3ac42124a7b39c75))
+* use variants for inline types and and enfore variants for indexed types ([6d4235f](https://github.com/Faolain/peerbit/commit/6d4235fc512eed95cb8cd2f71d72b21eba8ff434))
+
+
+### Bug Fixes
+
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* correctly handle end condition ([363f6a8](https://github.com/Faolain/peerbit/commit/363f6a883b866c1cc0397445d1ca58cb3c17f993))
+* domain default any ([a5aea70](https://github.com/Faolain/peerbit/commit/a5aea702064f5cfd8ba1ce5779130b3a68e43ce8))
+* flaky timer ([1338dc3](https://github.com/Faolain/peerbit/commit/1338dc3dd75463a99ed2b66bf142da96d0152000))
+* handle lifecycle errors and abort signals in getCover method ([ef15683](https://github.com/Faolain/peerbit/commit/ef1568368416615f9fc63942093dcc5ff4540db7))
+* iblt fallback sync naive ([a6d3538](https://github.com/Faolain/peerbit/commit/a6d3538f8b0e80e93bca81acedab2ff29f2d923b))
+* listener leak ([37b3a70](https://github.com/Faolain/peerbit/commit/37b3a70f75933d881bcc0875c32983fde033d39d))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* settle append delivery to current replicators ([63c6b11](https://github.com/Faolain/peerbit/commit/63c6b1195e7116876e1f357a7112b9f1b33d4658))
+* **shared-log:** apply replication segments without waitFor ([83bec78](https://github.com/Faolain/peerbit/commit/83bec7834299d877bdae85623daeeb01bcd6940c))
+* **shared-log:** cover selection for wrapped start ([36ad887](https://github.com/Faolain/peerbit/commit/36ad887b15756ae6c51eb27bf604d874eab66212))
+* **shared-log:** cover wrap + rebalance removals ([0536b98](https://github.com/Faolain/peerbit/commit/0536b981e9031f50b8b87c7c7a12c33f05eb5b1f))
+* **shared-log:** ignore no-op replication resets ([d31c0ff](https://github.com/Faolain/peerbit/commit/d31c0ff885f7f5cf71fcd5507005cea5f15bbfce))
+* **shared-log:** include last peer in cover set ([4a1b137](https://github.com/Faolain/peerbit/commit/4a1b13733f5e47bb68913fe96cb6e05bdbb942fa))
+* **shared-log:** include peer on cover tie ([e6e0217](https://github.com/Faolain/peerbit/commit/e6e02177b1cdacefce8d236596ee6f47883e0df1))
+* **shared-log:** increase waitForReplicator timeout ([52eac7b](https://github.com/Faolain/peerbit/commit/52eac7b76b653a97aec2704f3ce38a454c75030f))
+* **shared-log:** increase waitForReplicator timeout ([11ea82e](https://github.com/Faolain/peerbit/commit/11ea82e83d0f12d59f249bfe0198b09587ae267e))
+* **shared-log:** keep requesting replication info ([74bcd55](https://github.com/Faolain/peerbit/commit/74bcd552a0348042f41f45b2315708b97b8e8242))
+* **shared-log:** make waitForReplicators robust ([ad0f88c](https://github.com/Faolain/peerbit/commit/ad0f88c881aeea42f5fc07968648823ebad7a4a4))
+* **shared-log:** prevent cover wrap loops ([19a7e13](https://github.com/Faolain/peerbit/commit/19a7e13a48fd45d55bbd4658bbba2fa8a44acb42))
+* **shared-log:** reachableOnly uses pubsub subscribers ([afdd8c0](https://github.com/Faolain/peerbit/commit/afdd8c0fb7eb5059a545530625dde0ab3dfe435e))
+* **shared-log:** request replication info for joins ([ac7de22](https://github.com/Faolain/peerbit/commit/ac7de22c5cf831fc8cf3a2b59a24b157dbcdf4e2))
+* **shared-log:** restore cover selection semantics ([fd6d8e7](https://github.com/Faolain/peerbit/commit/fd6d8e77b7cf04d7b9a1c6f59065a50944f9d9bb))
+* **shared-log:** stabilize prune + reachableOnly ([55a0ebf](https://github.com/Faolain/peerbit/commit/55a0ebf221a5d9d5f10c0d60ebd4c2fc8d628c08))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Refactors
+
+* streamline message processing in RatelessIBLTSynchronizer and better handling for InvalidDegree error ([0fddff8](https://github.com/Faolain/peerbit/commit/0fddff89119fe8f826b1831ed7e358ef7c257b4b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/log bumped to 6.0.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/riblt bumped to 1.3.0
+    * @peerbit/rpc bumped to 5.5.0
+    * @peerbit/any-store bumped to 2.3.0
+    * @peerbit/blocks bumped to 3.2.0
+    * @peerbit/blocks-interface bumped to 1.6.0
+    * @peerbit/cache bumped to 2.3.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/indexer-sqlite3 bumped to 3.0.0
+    * @peerbit/pubsub bumped to 4.2.0
+    * @peerbit/pubsub-interface bumped to 4.2.0
+    * @peerbit/stream-interface bumped to 5.5.0
+    * @peerbit/time bumped to 2.4.0
+  * devDependencies
+    * @peerbit/test-utils bumped to 2.4.0
+
 ## [12.3.5](https://github.com/dao-xyz/peerbit/compare/shared-log-v12.3.4...shared-log-v12.3.5) (2026-01-27)
 
 

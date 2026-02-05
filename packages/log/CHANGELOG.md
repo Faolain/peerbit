@@ -368,6 +368,54 @@
   * devDependencies
     * @peerbit/test-utils bumped from 2.0.32 to 2.0.33
 
+## [6.0.0](https://github.com/Faolain/peerbit/compare/log-v5.0.10...log-v6.0.0) (2026-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* use variants for inline types and and enfore variants for indexed types
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* make keychain libp2p compatible ([00aecf1](https://github.com/Faolain/peerbit/commit/00aecf1be807368b11800948cbc92ca03f8eb5c4))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* use variants for inline types and and enfore variants for indexed types ([6d4235f](https://github.com/Faolain/peerbit/commit/6d4235fc512eed95cb8cd2f71d72b21eba8ff434))
+
+
+### Bug Fixes
+
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* bump libp2p ([48b50ce](https://github.com/Faolain/peerbit/commit/48b50ce26c19c12fcda0b099587e801d196dce54))
+* force libsodium 0.7.15 tmp ([663c997](https://github.com/Faolain/peerbit/commit/663c997100237cebcfc28bd782cd4057ab22e8d6))
+* fromMultihash relax option type ([37df426](https://github.com/Faolain/peerbit/commit/37df426d546b15fb7fd0aed82d152369f1d24dc7))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* Uint8array inner generic type ([db9a39b](https://github.com/Faolain/peerbit/commit/db9a39bed8501a45212d6130ffeed455422fa613))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/any-store bumped to 2.3.0
+    * @peerbit/blocks bumped to 3.2.0
+    * @peerbit/blocks-interface bumped to 1.6.0
+    * @peerbit/cache bumped to 2.3.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/indexer-sqlite3 bumped to 3.0.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/indexer-simple bumped to 1.3.0
+    * @peerbit/keychain bumped to 1.3.0
+    * @peerbit/pubsub-interface bumped to 4.2.0
+    * @peerbit/stream-interface bumped to 5.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/time bumped to 2.4.0
+  * devDependencies
+    * @peerbit/test-utils bumped to 2.4.0
+
 ## [5.0.10](https://github.com/dao-xyz/peerbit/compare/log-v5.0.9...log-v5.0.10) (2026-01-27)
 
 

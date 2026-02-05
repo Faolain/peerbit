@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0](https://github.com/Faolain/peerbit/compare/riblt-v1.2.0...riblt-v1.3.0) (2026-02-05)
+
+
+### Features
+
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* unify asset bundling into dist/assets for asset generating packages ([5d6612c](https://github.com/Faolain/peerbit/commit/5d6612c726f5eebbf5e05cc082a1fca16831e9e2))
+
+
+### Bug Fixes
+
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* update deps ([6d9be00](https://github.com/Faolain/peerbit/commit/6d9be00c82fdb2bc0d4477cbfa49b40213c86e17))
+
 ## [1.2.0](https://github.com/dao-xyz/peerbit/compare/riblt-v1.1.0...riblt-v1.2.0) (2026-01-17)
 
 

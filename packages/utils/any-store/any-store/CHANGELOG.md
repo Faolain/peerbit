@@ -33,6 +33,32 @@
   * dependencies
     * @peerbit/crypto bumped from ^2.1.7 to ^2.2.0
 
+## [2.3.0](https://github.com/Faolain/peerbit/compare/any-store-v2.2.4...any-store-v2.3.0) (2026-02-05)
+
+
+### Features
+
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* bundling assets ([8e11eec](https://github.com/Faolain/peerbit/commit/8e11eec115ad37139c3172016c975043d7dd3b6a))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/any-store-opfs bumped to 1.2.0
+    * @peerbit/any-store-interface bumped to 1.2.0
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/build-assets bumped to 1.2.0
+
 ## [2.2.4](https://github.com/dao-xyz/peerbit/compare/any-store-v2.2.3...any-store-v2.2.4) (2025-12-30)
 
 

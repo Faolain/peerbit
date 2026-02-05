@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0](https://github.com/Faolain/peerbit/compare/canonical-client-v1.1.2...canonical-client-v1.2.0) (2026-02-05)
+
+
+### Features
+
+* canonical open DX improvements ([90d77b6](https://github.com/Faolain/peerbit/commit/90d77b6d9efc1cc502b5ac0948ecabf62692f46f))
+* canonical open DX improvements ([75e08ab](https://github.com/Faolain/peerbit/commit/75e08abd47e77041e483340317285612363426fe))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-transport bumped to 1.1.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/program bumped to 5.7.0
+
 ## [1.1.2](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.1...canonical-client-v1.1.2) (2026-01-27)
 
 

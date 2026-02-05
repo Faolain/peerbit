@@ -630,6 +630,37 @@
   * devDependencies
     * @peerbit/test-utils bumped from ^2.0.32 to ^2.0.33
 
+## [5.4.0](https://github.com/Faolain/peerbit/compare/identity-access-controller-v5.3.6...identity-access-controller-v5.4.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* relase config and restore versions ([04ba9f6](https://github.com/Faolain/peerbit/commit/04ba9f6942a8aed24fc8c7f26637599c0595d621))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/document bumped to 13.0.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/shared-log bumped to 13.0.0
+    * @peerbit/trusted-network bumped to 6.0.0
+  * devDependencies
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/test-utils bumped to 2.4.0
+
 ## [5.3.6](https://github.com/dao-xyz/peerbit/compare/identity-access-controller-v5.3.5...identity-access-controller-v5.3.6) (2026-01-27)
 
 

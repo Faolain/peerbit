@@ -43,6 +43,60 @@
   * dependencies
     * @peerbit/stream-interface bumped from ^4.0.0 to ^5.0.0
 
+## [4.7.0](https://github.com/Faolain/peerbit/compare/stream-v4.6.0...stream-v4.7.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* implement support for multiple inbound streams with pruning and activity tracking ([0a48d65](https://github.com/Faolain/peerbit/commit/0a48d658ba314d55fd8fb36457d9e4ef970251d8))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* refactor outbound stream handling to support multiple streams and improve error management ([ce52b58](https://github.com/Faolain/peerbit/commit/ce52b58a4b1ad1413e4037019c398b8522150312))
+* **stream:** add numeric priority lanes ([5818dd4](https://github.com/Faolain/peerbit/commit/5818dd449a108c98f202100d5170ba6e49e95c6a))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* Allow new outbound streams to be created even if previously failed half way. Allow fairness in the priority queue to not starve slow lanes ([780f7ce](https://github.com/Faolain/peerbit/commit/780f7cef4b1eb3422e59ec43c839369d78e7e32d))
+* avoid removing peers on partial disconnect ([0734a85](https://github.com/Faolain/peerbit/commit/0734a8572f2ac4670017b1c9e549bdee633d02bf))
+* bump libp2p ([48b50ce](https://github.com/Faolain/peerbit/commit/48b50ce26c19c12fcda0b099587e801d196dce54))
+* cleanup empty route map correctly ([4ba0a8d](https://github.com/Faolain/peerbit/commit/4ba0a8d1638fe5a2e0eca2717f5fb6892e991d07))
+* close outbound stream if stream already exist ([9d4b5be](https://github.com/Faolain/peerbit/commit/9d4b5be201dd3db1336e1e51bf8cbfae9181f31e))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* improved waitFor api to handle ([967dd46](https://github.com/Faolain/peerbit/commit/967dd46c77f18f2830b0e50813ad974da044b985))
+* inline reporter ([ef667d8](https://github.com/Faolain/peerbit/commit/ef667d8d3ff4e603efe18fbf09a27e22f0824784))
+* migrate to libp2p v3 ([6f8f7b0](https://github.com/Faolain/peerbit/commit/6f8f7b0b286d43c4363e02b7e4ca88d22c04c2b3))
+* migrate to libp2p v3 ([9a8bbf9](https://github.com/Faolain/peerbit/commit/9a8bbf9d494064908194e8ee17643089c8273a80))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* replace stale outbound stream on new attachOutboundStream ([b9eff78](https://github.com/Faolain/peerbit/commit/b9eff78e442a500880c72e65beafb6b3031c0dff))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* rm "useDefineForClassFields" property ([298c1bf](https://github.com/Faolain/peerbit/commit/298c1bff734804cb8143ab802cb942265cde7db4))
+* **stream:** avoid removing peer when other connections remain ([f0943dc](https://github.com/Faolain/peerbit/commit/f0943dccf26659bb9e2d7b7709ae2a75da6f4c26))
+* **stream:** avoid removing peer with active connections ([f098901](https://github.com/Faolain/peerbit/commit/f098901a444dca8dcef011cbaf549956c9d3f219))
+* **stream:** cleanup waitForEvent listeners ([e0a0fef](https://github.com/Faolain/peerbit/commit/e0a0fef1dcceb75f4af327baf3157f75d214a620))
+* update devDependencies and include test directory in tsconfig ([c159a45](https://github.com/Faolain/peerbit/commit/c159a457eab7d419c64696512eaacab6fcb1ab87))
+* update vite ([7a5df57](https://github.com/Faolain/peerbit/commit/7a5df5757a21f29c1cd7f8bf4d4a8387c3393b0d))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Refactors
+
+* simplify data processing loop in DirectStream class ([f95be98](https://github.com/Faolain/peerbit/commit/f95be98b175b640c62f2c46717a3c3266fc4ffda))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/cache bumped to 2.3.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/stream-interface bumped to 5.5.0
+    * @peerbit/time bumped to 2.4.0
+  * devDependencies
+    * @peerbit/libp2p-test-utils bumped to 2.3.0
+
 ## [4.6.0](https://github.com/dao-xyz/peerbit/compare/stream-v4.5.3...stream-v4.6.0) (2026-01-22)
 
 

@@ -313,6 +313,56 @@
     * @peerbit/pubsub bumped from ^3.0.4 to ^3.0.5
     * @peerbit/blocks bumped from ^2.0.31 to ^2.0.32
 
+## [4.5.0](https://github.com/Faolain/peerbit/compare/peerbit-v4.4.19...peerbit-v4.5.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* add stats endpoint to retrieve connection and dial queue information ([5d4e53c](https://github.com/Faolain/peerbit/commit/5d4e53c2f4ed68975b260a1792112522b4e26f70))
+* add webrtc direct support ([ec49bca](https://github.com/Faolain/peerbit/commit/ec49bca97650b46c6ab412544c7c1af44b4914c5))
+* make keychain libp2p compatible ([00aecf1](https://github.com/Faolain/peerbit/commit/00aecf1be807368b11800948cbc92ca03f8eb5c4))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* bump libp2p ([48b50ce](https://github.com/Faolain/peerbit/commit/48b50ce26c19c12fcda0b099587e801d196dce54))
+* bundling assets ([8e11eec](https://github.com/Faolain/peerbit/commit/8e11eec115ad37139c3172016c975043d7dd3b6a))
+* disable reconnections by default ([4a6b62b](https://github.com/Faolain/peerbit/commit/4a6b62b92d72713ff37db390f3c78afd28ecdff3))
+* force libsodium 0.7.15 tmp ([663c997](https://github.com/Faolain/peerbit/commit/663c997100237cebcfc28bd782cd4057ab22e8d6))
+* migrate to libp2p v3 ([566e674](https://github.com/Faolain/peerbit/commit/566e6740c90c5820c3d48008601d3d792abd3159))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* prevent users from passing peerId in favor of privateKey on client construction (libp2p v3 compat.) ([19a0baf](https://github.com/Faolain/peerbit/commit/19a0baff70271818ce01b03b81f1de1b5f3b5546))
+* replace TextEncoder with Uint8Array for SELF_IDENTITY_KEY_ID initialization ([1189d78](https://github.com/Faolain/peerbit/commit/1189d78950443b5b7f885bc52bd10b2f9c4298d4))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* tmp disable webrtc direct ([d25431a](https://github.com/Faolain/peerbit/commit/d25431a71d35fa55c51b00194248d329f3edaa70))
+* update bootstrap method to accept optional addresses ([94a82ff](https://github.com/Faolain/peerbit/commit/94a82ffb057c634053da38cf450a8b15b72aeb4b))
+* update for new waitFor behaviour ([9781c65](https://github.com/Faolain/peerbit/commit/9781c65cd68700f19dbddf7ae25cc88933ab8c10))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/any-store bumped to 2.3.0
+    * @peerbit/any-store-opfs bumped to 1.2.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/build-assets bumped to 1.2.0
+    * @peerbit/keychain bumped to 1.3.0
+    * @peerbit/indexer-simple bumped to 1.3.0
+    * @peerbit/indexer-sqlite3 bumped to 3.0.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/blocks bumped to 3.2.0
+    * @peerbit/pubsub bumped to 4.2.0
+    * @peerbit/stream-interface bumped to 5.5.0
+
 ## [4.4.19](https://github.com/dao-xyz/peerbit/compare/peerbit-v4.4.18...peerbit-v4.4.19) (2026-01-27)
 
 

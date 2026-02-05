@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.2.0](https://github.com/Faolain/peerbit/compare/indexer-interface-v2.1.1...indexer-interface-v2.2.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([bf96e60](https://github.com/Faolain/peerbit/commit/bf96e609250ff47d4854e73e7ee252d1495aa736))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* clearup vfs pool on drop ([e5a07a4](https://github.com/Faolain/peerbit/commit/e5a07a403330656ab1210b460dbf04596eff5257))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* rever preserveDbFile flag ([4dac27a](https://github.com/Faolain/peerbit/commit/4dac27ad0d31fba0b31a0f53d734ad1d38ad5e3b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+
 ## [2.1.1](https://github.com/dao-xyz/peerbit/compare/indexer-interface-v2.1.0...indexer-interface-v2.1.1) (2025-12-30)
 
 

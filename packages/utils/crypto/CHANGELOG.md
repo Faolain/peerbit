@@ -61,6 +61,30 @@
   * dependencies
     * @peerbit/cache bumped from ^2.0.5 to ^2.0.6
 
+## [2.5.0](https://github.com/Faolain/peerbit/compare/crypto-v2.4.1...crypto-v2.5.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* force libsodium 0.7.15 tmp ([663c997](https://github.com/Faolain/peerbit/commit/663c997100237cebcfc28bd782cd4057ab22e8d6))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* Uint8array inner generic type ([db9a39b](https://github.com/Faolain/peerbit/commit/db9a39bed8501a45212d6130ffeed455422fa613))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/cache bumped to 2.3.0
+
 ## [2.4.1](https://github.com/dao-xyz/peerbit/compare/crypto-v2.4.0...crypto-v2.4.1) (2025-12-30)
 
 

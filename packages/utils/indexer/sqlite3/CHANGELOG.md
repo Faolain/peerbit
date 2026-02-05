@@ -1,5 +1,55 @@
 # Changelog
 
+## [3.0.0](https://github.com/Faolain/peerbit/compare/indexer-sqlite3-v2.1.2...indexer-sqlite3-v3.0.0) (2026-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* force variant on classes to prevent undefined behaviour when classnames get minified
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* force variant on classes to prevent undefined behaviour when classnames get minified ([cba3a28](https://github.com/Faolain/peerbit/commit/cba3a281ecca2f6be0eec4c76f562659ddb8cd45))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* unify asset bundling into dist/assets for asset generating packages ([5d6612c](https://github.com/Faolain/peerbit/commit/5d6612c726f5eebbf5e05cc082a1fca16831e9e2))
+
+
+### Bug Fixes
+
+* add fully qualified name on get primary key to prevent ambigious situations where nested documents have the same primery key ([1beb9da](https://github.com/Faolain/peerbit/commit/1beb9dac5d0f0b52affa4839fba206a0727e26bf))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* add primary table identifiers for count and get to prevent ambigious statements ([7c84377](https://github.com/Faolain/peerbit/commit/7c843775e5dca82e27e787ed065a82dcf6fb4bbb))
+* clearup vfs pool on drop ([e5a07a4](https://github.com/Faolain/peerbit/commit/e5a07a403330656ab1210b460dbf04596eff5257))
+* correctly handle put/del race condition with nested documents and arrays ([90b1269](https://github.com/Faolain/peerbit/commit/90b12699a0ae6d5bf7b7258b2f0758e693cdc831))
+* force libsodium 0.7.15 tmp ([663c997](https://github.com/Faolain/peerbit/commit/663c997100237cebcfc28bd782cd4057ab22e8d6))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* **indexer-sqlite3:** correct child FK generation ([369b236](https://github.com/Faolain/peerbit/commit/369b236630c8e15da88f2ee7e4f64ed385c39ed2))
+* **indexer-sqlite3:** correct child FK generation ([e2f14de](https://github.com/Faolain/peerbit/commit/e2f14dec400b5aa693a1d2caa65e0f0902d5c459))
+* **indexer-sqlite3:** map fixedArray(u8) parent ids as BLOB ([91f84d0](https://github.com/Faolain/peerbit/commit/91f84d093594f8c092d0b5e74c4c8c578e504867))
+* **indexer-sqlite3:** map fixedArray(u8) parent ids as BLOB ([227fffe](https://github.com/Faolain/peerbit/commit/227fffe5e8c5afe669ffcd42c732ede8b2b9168a))
+* **indexer-sqlite3:** support nested POJOs; reject ambiguous polymorphism ([530bc4d](https://github.com/Faolain/peerbit/commit/530bc4d22711b08d174a726de4059bcd41d61236))
+* make sure sqlite3 is initialized from /peerbit/sqlite/ ([a230c4a](https://github.com/Faolain/peerbit/commit/a230c4a6d5389c358b8abd1edef82ca490fa22a1))
+* refactor sqlite3 module loading to prevent concurrent initializations ([6605c73](https://github.com/Faolain/peerbit/commit/6605c73a486768f920fbb54fbf8e80a539d2e4cf))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* rever preserveDbFile flag ([4dac27a](https://github.com/Faolain/peerbit/commit/4dac27ad0d31fba0b31a0f53d734ad1d38ad5e3b))
+* support deeply nested inlining ([5e3fbc8](https://github.com/Faolain/peerbit/commit/5e3fbc8881346a1a0bdf23d258aab2c596d9aacd))
+* update better-sqlite3 ([fe122f7](https://github.com/Faolain/peerbit/commit/fe122f7026d41cb9f6cd0208c772cdd0d4a729c1))
+* update sqlite ([bdbcc4c](https://github.com/Faolain/peerbit/commit/bdbcc4c6cffca19122f7a2c2d9618d2e8a872ec2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/time bumped to 2.4.0
+  * devDependencies
+    * @peerbit/indexer-tests bumped to 3.0.0
+    * @peerbit/build-assets bumped to 1.2.0
+
 ## [2.1.2](https://github.com/dao-xyz/peerbit/compare/indexer-sqlite3-v2.1.1...indexer-sqlite3-v2.1.2) (2026-01-23)
 
 

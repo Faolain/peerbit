@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0](https://github.com/Faolain/peerbit/compare/program-react-v0.4.2...program-react-v0.5.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* canonical open DX improvements ([90d77b6](https://github.com/Faolain/peerbit/commit/90d77b6d9efc1cc502b5ac0948ecabf62692f46f))
+* canonical open DX improvements ([75e08ab](https://github.com/Faolain/peerbit/commit/75e08abd47e77041e483340317285612363426fe))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* peer as first argument and remove dependency on @peerbit/react package ([9b09214](https://github.com/Faolain/peerbit/commit/9b09214a9be599a6d06ffb087440d4703b4f0460))
+
+
+### Bug Fixes
+
+* allow undefiend ProgramClient ([840cc8e](https://github.com/Faolain/peerbit/commit/840cc8e7f0a316113bebeb13aa5c597d2a920065))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/program bumped to 5.7.0
+
 ## [0.4.2](https://github.com/dao-xyz/peerbit/compare/program-react-v0.4.1...program-react-v0.4.2) (2026-01-27)
 
 

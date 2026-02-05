@@ -566,6 +566,44 @@
   * devDependencies
     * @peerbit/test-utils bumped from ^2.0.32 to ^2.0.33
 
+## [6.0.0](https://github.com/Faolain/peerbit/compare/trusted-network-v5.1.6...trusted-network-v6.0.0) (2026-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* add variant on FromTo
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* add variant on FromTo ([67025bb](https://github.com/Faolain/peerbit/commit/67025bb57fb8790796e571cc2e0d5f8eba245ef0))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* determinsm in constructor ([95137e7](https://github.com/Faolain/peerbit/commit/95137e7166ce7784f3f15f382bc852f1c330eb79))
+* init ([42c2b6b](https://github.com/Faolain/peerbit/commit/42c2b6b041621c0c9f4e81aff88c9a4d8ca710ec))
+* relase config and restore versions ([04ba9f6](https://github.com/Faolain/peerbit/commit/04ba9f6942a8aed24fc8c7f26637599c0595d621))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* update deps ([9d4bb63](https://github.com/Faolain/peerbit/commit/9d4bb6388339404fad1f1bb39100f096d6d9fbf3))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/document bumped to 13.0.0
+    * @peerbit/log bumped to 6.0.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/shared-log bumped to 13.0.0
+  * devDependencies
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/test-utils bumped to 2.4.0
+
 ## [5.1.6](https://github.com/dao-xyz/peerbit/compare/trusted-network-v5.1.5...trusted-network-v5.1.6) (2026-01-27)
 
 

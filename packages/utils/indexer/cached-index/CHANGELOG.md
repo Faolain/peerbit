@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/Faolain/peerbit/compare/indexer-cache-v0.2.2...indexer-cache-v0.3.0) (2026-02-05)
+
+
+### Features
+
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* relase config and restore versions ([04ba9f6](https://github.com/Faolain/peerbit/commit/04ba9f6942a8aed24fc8c7f26637599c0595d621))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/time bumped to 2.4.0
+  * devDependencies
+    * @peerbit/indexer-simple bumped to 1.3.0
+
 ## [0.2.2](https://github.com/dao-xyz/peerbit/compare/indexer-cache-v0.2.1...indexer-cache-v0.2.2) (2025-12-30)
 
 

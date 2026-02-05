@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.1.0](https://github.com/Faolain/peerbit/compare/document-proxy-v1.0.6...document-proxy-v1.1.0) (2026-02-05)
+
+
+### Features
+
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+
+
+### Bug Fixes
+
+* **document:** align DocumentsLike.count return types ([61c6690](https://github.com/Faolain/peerbit/commit/61c66907404b9b5402b0fafca58bd0fb69dd61c8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.2.0
+    * @peerbit/canonical-host bumped to 1.1.0
+    * @peerbit/document bumped to 13.0.0
+    * @peerbit/document-interface bumped to 4.0.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/shared-log-proxy bumped to 1.1.0
+    * @peerbit/stream-interface bumped to 5.5.0
+  * devDependencies
+    * @peerbit/crypto bumped to 2.5.0
+
 ## [1.0.6](https://github.com/dao-xyz/peerbit/compare/document-proxy-v1.0.5...document-proxy-v1.0.6) (2026-01-27)
 
 

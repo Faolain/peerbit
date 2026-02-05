@@ -66,6 +66,32 @@
   * dependencies
     * @peerbit/crypto bumped from 2.1.7 to 2.2.0
 
+## [5.5.0](https://github.com/Faolain/peerbit/compare/stream-interface-v5.4.0...stream-interface-v5.5.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* **stream:** add numeric priority lanes ([5818dd4](https://github.com/Faolain/peerbit/commit/5818dd449a108c98f202100d5170ba6e49e95c6a))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* import esm ([d0a8570](https://github.com/Faolain/peerbit/commit/d0a8570567234fc2459bbc8512837df2fe2bfae7))
+* improved waitFor api to handle ([967dd46](https://github.com/Faolain/peerbit/commit/967dd46c77f18f2830b0e50813ad974da044b985))
+* rename coercePeerRefToIterable to coercePeerRefToHash for clarity ([4703b22](https://github.com/Faolain/peerbit/commit/4703b2254165055d09537f0fe0af33cd9b9c023f))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+
 ## [5.4.0](https://github.com/dao-xyz/peerbit/compare/stream-interface-v5.3.1...stream-interface-v5.4.0) (2026-01-22)
 
 

@@ -400,6 +400,38 @@
   * dependencies
     * peerbit bumped from 4.0.6 to 4.0.7
 
+## [2.4.0](https://github.com/Faolain/peerbit/compare/test-utils-v2.3.19...test-utils-v2.4.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* make keychain libp2p compatible ([00aecf1](https://github.com/Faolain/peerbit/commit/00aecf1be807368b11800948cbc92ca03f8eb5c4))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* **test-utils:** reconnect peers after restart ([f992df6](https://github.com/Faolain/peerbit/commit/f992df64197fd8533fc4ed87ef1f626c4b8ca0bc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/libp2p-test-utils bumped to 2.3.0
+    * peerbit bumped to 4.5.0
+    * @peerbit/blocks bumped to 3.2.0
+    * @peerbit/keychain bumped to 1.3.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/pubsub bumped to 4.2.0
+    * @peerbit/stream bumped to 4.7.0
+  * devDependencies
+    * @peerbit/time bumped to 2.4.0
+
 ## [2.3.19](https://github.com/dao-xyz/peerbit/compare/test-utils-v2.3.18...test-utils-v2.3.19) (2026-01-27)
 
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.0.0](https://github.com/Faolain/peerbit/compare/document-interface-v3.2.4...document-interface-v4.0.0) (2026-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* Add IteationRequest to support iterating and concurrently subscribe to mutations
+
+### Features
+
+* Add IteationRequest to support iterating and concurrently subscribe to mutations ([b578bb4](https://github.com/Faolain/peerbit/commit/b578bb499c16a0601eb070f3ae4886a66a5f824f))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* add NotFoundError class and update error handling in Documents class for deleting non existing documents ([9d9c80b](https://github.com/Faolain/peerbit/commit/9d9c80b179596d37bf3a19fe2acab65154e4de77))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/log bumped to 6.0.0
+
 ## [3.2.4](https://github.com/dao-xyz/peerbit/compare/document-interface-v3.2.3...document-interface-v3.2.4) (2026-01-27)
 
 

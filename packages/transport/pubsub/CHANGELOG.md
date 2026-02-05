@@ -188,6 +188,40 @@
   * dependencies
     * @peerbit/stream bumped from 4.0.2 to 4.0.3
 
+## [4.2.0](https://github.com/Faolain/peerbit/compare/pubsub-v4.1.4...pubsub-v4.2.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* migrate to libp2p v3 ([6f8f7b0](https://github.com/Faolain/peerbit/commit/6f8f7b0b286d43c4363e02b7e4ca88d22c04c2b3))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* **pubsub:** cleanup waitForSubscribers abort/timeout ([ff789fe](https://github.com/Faolain/peerbit/commit/ff789fe7b2ba5f3cdb75a53ced4da0351e77f657))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/pubsub-interface bumped to 4.2.0
+    * @peerbit/stream bumped to 4.7.0
+    * @peerbit/stream-interface bumped to 5.5.0
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/any-store-interface bumped to 1.2.0
+  * devDependencies
+    * @peerbit/libp2p-test-utils bumped to 2.3.0
+
 ## [4.1.4](https://github.com/dao-xyz/peerbit/compare/pubsub-v4.1.3...pubsub-v4.1.4) (2026-01-22)
 
 

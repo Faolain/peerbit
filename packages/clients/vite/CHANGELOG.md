@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.2.0](https://github.com/Faolain/peerbit/compare/vite-v1.1.11...vite-v1.2.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* unify asset bundling into dist/assets for asset generating packages ([5d6612c](https://github.com/Faolain/peerbit/commit/5d6612c726f5eebbf5e05cc082a1fca16831e9e2))
+
+
+### Bug Fixes
+
+* add alias configuration for worker paths in copy-to-public plugin ([5f70b5b](https://github.com/Faolain/peerbit/commit/5f70b5b179cb361113d3e2b06f78bcbb2eae2f77))
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* add tests and abstraction for lib resolvment ([f693e0d](https://github.com/Faolain/peerbit/commit/f693e0d86b6492b583315a917b706015e8eb56a0))
+* enforce pre-processing in copy-to-public plugin and ensure worker file exists in public directory ([e21353e](https://github.com/Faolain/peerbit/commit/e21353ee32d0dd9636cfc39724f695cd6c7039f7))
+* enhance resolveId function in copy-to-public plugin for better worker path handling ([fc46c0e](https://github.com/Faolain/peerbit/commit/fc46c0ecf31263b53ddc5f61f2516b387fe20ba6))
+* init ([42c2b6b](https://github.com/Faolain/peerbit/commit/42c2b6b041621c0c9f4e81aff88c9a4d8ca710ec))
+* missing events deps ([f0be11a](https://github.com/Faolain/peerbit/commit/f0be11a0ca26a48aa3991f686e1ca36660e6cb09))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* polyfill events ([637f6e5](https://github.com/Faolain/peerbit/commit/637f6e50de5a20a82dacf7ed60a104e7dbefb51a))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* rm "useDefineForClassFields" property ([298c1bf](https://github.com/Faolain/peerbit/commit/298c1bff734804cb8143ab802cb942265cde7db4))
+* throw on missing public folder ([8a6c6bc](https://github.com/Faolain/peerbit/commit/8a6c6bc643fa93e382b252b442a524d37bf3dc9c))
+* update copy-to-public plugin to copy entire peerbit directory from @peerbit/indexer-sqlite3 ([d9a254f](https://github.com/Faolain/peerbit/commit/d9a254f7caf7a8599edd9b0b9d4f592564e20d1c))
+* update devDependencies and include test directory in tsconfig ([c159a45](https://github.com/Faolain/peerbit/commit/c159a457eab7d419c64696512eaacab6fcb1ab87))
+* update vite ([7a5df57](https://github.com/Faolain/peerbit/commit/7a5df5757a21f29c1cd7f8bf4d4a8387c3393b0d))
+* use build-assets for asset resolution ([e060e16](https://github.com/Faolain/peerbit/commit/e060e16981a14ffb00004b9f50ace0d5e45c9cfe))
+* **vite:** avoid static-copy overwrite flake ([7182c10](https://github.com/Faolain/peerbit/commit/7182c108b2c57f2d288a46287126fd86089fa353))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/build-assets bumped to 1.2.0
+  * devDependencies
+    * @peerbit/indexer-sqlite3 bumped to 3.0.0
+    * @peerbit/any-store bumped to 2.3.0
+    * @peerbit/any-store-opfs bumped to 1.2.0
+
 ## [1.1.11](https://github.com/dao-xyz/peerbit/compare/vite-v1.1.10...vite-v1.1.11) (2026-01-23)
 
 

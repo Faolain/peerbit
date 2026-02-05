@@ -54,6 +54,30 @@
   * devDependencies
     * @peerbit/time bumped from 2.0.5 to 2.0.6
 
+## [2.3.0](https://github.com/Faolain/peerbit/compare/libp2p-test-utils-v2.2.0...libp2p-test-utils-v2.3.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* bump libp2p ([48b50ce](https://github.com/Faolain/peerbit/commit/48b50ce26c19c12fcda0b099587e801d196dce54))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* migrate to libp2p v3 ([6f8f7b0](https://github.com/Faolain/peerbit/commit/6f8f7b0b286d43c4363e02b7e4ca88d22c04c2b3))
+* migrate to libp2p v3 ([9a8bbf9](https://github.com/Faolain/peerbit/commit/9a8bbf9d494064908194e8ee17643089c8273a80))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @peerbit/time bumped to 2.4.0
+
 ## [2.2.0](https://github.com/dao-xyz/peerbit/compare/libp2p-test-utils-v2.1.21...libp2p-test-utils-v2.2.0) (2025-11-25)
 
 

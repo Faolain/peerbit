@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.0.0](https://github.com/Faolain/peerbit/compare/indexer-tests-v2.0.1...indexer-tests-v3.0.0) (2026-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* force variant on classes to prevent undefined behaviour when classnames get minified
+
+### Features
+
+* force variant on classes to prevent undefined behaviour when classnames get minified ([cba3a28](https://github.com/Faolain/peerbit/commit/cba3a281ecca2f6be0eec4c76f562659ddb8cd45))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* clearup vfs pool on drop ([e5a07a4](https://github.com/Faolain/peerbit/commit/e5a07a403330656ab1210b460dbf04596eff5257))
+* correctly handle put/del race condition with nested documents and arrays ([90b1269](https://github.com/Faolain/peerbit/commit/90b12699a0ae6d5bf7b7258b2f0758e693cdc831))
+* force libsodium 0.7.15 tmp ([663c997](https://github.com/Faolain/peerbit/commit/663c997100237cebcfc28bd782cd4057ab22e8d6))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* rever preserveDbFile flag ([4dac27a](https://github.com/Faolain/peerbit/commit/4dac27ad0d31fba0b31a0f53d734ad1d38ad5e3b))
+* support deeply nested inlining ([5e3fbc8](https://github.com/Faolain/peerbit/commit/5e3fbc8881346a1a0bdf23d258aab2c596d9aacd))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/time bumped to 2.4.0
+
 ## [2.0.1](https://github.com/dao-xyz/peerbit/compare/indexer-tests-v2.0.0...indexer-tests-v2.0.1) (2025-12-30)
 
 

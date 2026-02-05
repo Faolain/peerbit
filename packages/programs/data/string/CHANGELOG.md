@@ -632,6 +632,37 @@
   * devDependencies
     * @peerbit/test-utils bumped from ^2.0.32 to ^2.0.33
 
+## [5.2.0](https://github.com/Faolain/peerbit/compare/string-v5.1.22...string-v5.2.0) (2026-02-05)
+
+
+### Features
+
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/shared-log bumped to 13.0.0
+    * @peerbit/rpc bumped to 5.5.0
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/log bumped to 6.0.0
+  * devDependencies
+    * @peerbit/test-utils bumped to 2.4.0
+
 ## [5.1.22](https://github.com/dao-xyz/peerbit/compare/string-v5.1.21...string-v5.1.22) (2026-01-27)
 
 

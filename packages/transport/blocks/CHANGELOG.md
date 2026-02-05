@@ -279,6 +279,42 @@
     * @peerbit/blocks-interface bumped from 1.2.18 to 1.2.19
     * @peerbit/crypto bumped from 2.1.7 to 2.2.0
 
+## [3.2.0](https://github.com/Faolain/peerbit/compare/blocks-v3.1.8...blocks-v3.2.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* **blocks:** handle delivery errors in publish and fetch request handling ([5fdadce](https://github.com/Faolain/peerbit/commit/5fdadce6269cd4591131941f27a4b95f2814820e))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* improved waitFor api to handle ([967dd46](https://github.com/Faolain/peerbit/commit/967dd46c77f18f2830b0e50813ad974da044b985))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/any-store bumped to 2.3.0
+    * @peerbit/any-store-interface bumped to 1.2.0
+    * @peerbit/cache bumped to 2.3.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/stream bumped to 4.7.0
+    * @peerbit/stream-interface bumped to 5.5.0
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/blocks-interface bumped to 1.6.0
+    * @peerbit/crypto bumped to 2.5.0
+  * devDependencies
+    * @peerbit/libp2p-test-utils bumped to 2.3.0
+
 ## [3.1.8](https://github.com/dao-xyz/peerbit/compare/blocks-v3.1.7...blocks-v3.1.8) (2026-01-24)
 
 

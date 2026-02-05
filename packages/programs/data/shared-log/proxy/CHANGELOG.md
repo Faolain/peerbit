@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.0](https://github.com/Faolain/peerbit/compare/shared-log-proxy-v1.0.6...shared-log-proxy-v1.1.0) (2026-02-05)
+
+
+### Features
+
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.2.0
+    * @peerbit/canonical-host bumped to 1.1.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/log bumped to 6.0.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/shared-log bumped to 13.0.0
+
 ## [1.0.6](https://github.com/dao-xyz/peerbit/compare/shared-log-proxy-v1.0.5...shared-log-proxy-v1.0.6) (2026-01-27)
 
 

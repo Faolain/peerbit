@@ -202,6 +202,44 @@
     * @peerbit/pubsub-interface bumped from ^3.0.2 to ^3.0.3
     * @peerbit/any-store bumped from ^2.0.1 to ^2.0.2
 
+## [5.7.0](https://github.com/Faolain/peerbit/compare/program-v5.6.3...program-v5.7.0) (2026-02-05)
+
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* support for cross package instanceOf Program checks ([9b6bccb](https://github.com/Faolain/peerbit/commit/9b6bccbcbcb908eaf8e3434e93c5590236192b72))
+
+
+### Bug Fixes
+
+* correctly handle concurrent subprogram openings ([a49f37b](https://github.com/Faolain/peerbit/commit/a49f37b9f31f62395c4e3ac60dd952b73a649be0))
+* fmt ([5c54079](https://github.com/Faolain/peerbit/commit/5c54079ced7f315b33b09fd85bbfa44677d0df2b))
+* program version reset ([5543e03](https://github.com/Faolain/peerbit/commit/5543e03a819f6034ddfd3713b3a1c95a0f87e4e5))
+* **program:** cleanup waitFor cancellation ([01ab157](https://github.com/Faolain/peerbit/commit/01ab157858dc5fab43f4d1d4b27ecd27f16aaa38))
+* **program:** handle existing reuse/replace for address opens ([88b12bb](https://github.com/Faolain/peerbit/commit/88b12bb97eb068bef59e6fc827c6bc12b5712053))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/keychain bumped to 1.3.0
+    * @peerbit/blocks-interface bumped to 1.6.0
+    * @peerbit/pubsub-interface bumped to 4.2.0
+    * @peerbit/any-store-interface bumped to 1.2.0
+    * @peerbit/libp2p-test-utils bumped to 2.3.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/stream-interface bumped to 5.5.0
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/blocks bumped to 3.2.0
+    * @peerbit/pubsub bumped to 4.2.0
+
 ## [5.6.3](https://github.com/dao-xyz/peerbit/compare/program-v5.6.2...program-v5.6.3) (2026-01-27)
 
 

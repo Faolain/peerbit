@@ -456,6 +456,94 @@
   * devDependencies
     * @peerbit/test-utils bumped from 2.0.32 to 2.0.33
 
+## [13.0.0](https://github.com/Faolain/peerbit/compare/document-v12.3.5...document-v13.0.0) (2026-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* use variants for inline types and and enfore variants for indexed types
+* Add IteationRequest to support iterating and concurrently subscribe to mutations
+
+### Features
+
+* add discovery options for iterators to wait for inflight nodes ([2a9473e](https://github.com/Faolain/peerbit/commit/2a9473e5b1d0ccac6f46152b6828bb7bf514247e))
+* Add IteationRequest to support iterating and concurrently subscribe to mutations ([b578bb4](https://github.com/Faolain/peerbit/commit/b578bb499c16a0601eb070f3ae4886a66a5f824f))
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* applyResults handler for custom ([48f8fda](https://github.com/Faolain/peerbit/commit/48f8fdaa718f9721ec08668d03f115808eff70c8))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* **document:** prioritize remote queries ([e38a67b](https://github.com/Faolain/peerbit/commit/e38a67bdcd313784de2c2e3db0099b24ce8c4acd))
+* improve count approximation using 95% confidence interval errorMargin ([19db639](https://github.com/Faolain/peerbit/commit/19db63946be124dac591524ea5010d64d1a524c6))
+* improve later result handling with outOfOrder block ([ca0f6dd](https://github.com/Faolain/peerbit/commit/ca0f6dd155ae58a35c375eeebc5f6d0ea40f3165))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* support merging updates into iterators (locally) ([e9379c8](https://github.com/Faolain/peerbit/commit/e9379c85e18b8c11bc15804fcb934b55dfca5431))
+* use variants for inline types and and enfore variants for indexed types ([6d4235f](https://github.com/Faolain/peerbit/commit/6d4235fc512eed95cb8cd2f71d72b21eba8ff434))
+
+
+### Bug Fixes
+
+* add export ([ff87533](https://github.com/Faolain/peerbit/commit/ff87533266ea9f64f79435a277672151758ec6b7))
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* add missing types to index export in document module ([bf3a27c](https://github.com/Faolain/peerbit/commit/bf3a27cb7e6be530fa18f2d51ca97c1989890b7c))
+* add NotFoundError class and update error handling in Documents class for deleting non existing documents ([9d9c80b](https://github.com/Faolain/peerbit/commit/9d9c80b179596d37bf3a19fe2acab65154e4de77))
+* correct keep open logic for non remote querying ([99b03a1](https://github.com/Faolain/peerbit/commit/99b03a156c7ba0de42fc49961bde995b586fd94b))
+* correctly handle includeIndexed ([e84bbf7](https://github.com/Faolain/peerbit/commit/e84bbf708168755852be1a0bd4a9ee311e18ac76))
+* dangling controller ([48ac6de](https://github.com/Faolain/peerbit/commit/48ac6de0e29c139b1fac7243e3b6f018b261089b))
+* **document:** align DocumentsLike.count return types ([61c6690](https://github.com/Faolain/peerbit/commit/61c66907404b9b5402b0fafca58bd0fb69dd61c8))
+* **document:** avoid pending() double-count in push-updates ([c7c4213](https://github.com/Faolain/peerbit/commit/c7c42137a76f1cdc5ca4cba820687bda99788c1c))
+* **document:** forward shared-log sync options ([874976b](https://github.com/Faolain/peerbit/commit/874976b7c668b1dea86d7a88d3393bddf3448fd2))
+* **document:** prime pending() for push-updates ([1826fd2](https://github.com/Faolain/peerbit/commit/1826fd2f24e1949e8b94a36bb9573051d1ef59cd))
+* enhance remote operation handling and add tests for non-replicator scenarios ([85edf4c](https://github.com/Faolain/peerbit/commit/85edf4cdb9acc0c61dac0c207408c05533d37054))
+* ensure merge entries are matched against the query into the iterator ([40ccb58](https://github.com/Faolain/peerbit/commit/40ccb58228814f9574e5777becd9325210d40ca1))
+* handle lifecycle errors and abort signals in getCover method ([ef15683](https://github.com/Faolain/peerbit/commit/ef1568368416615f9fc63942093dcc5ff4540db7))
+* handle null listeners ([9581805](https://github.com/Faolain/peerbit/commit/958180504904cef3e657ebf0ca5b2ae97ecb3da2))
+* handle SearchRequest with push option ([e14545e](https://github.com/Faolain/peerbit/commit/e14545ecd743e08ebd71f95be6f19978d551f1e1))
+* handle undefined count ([d97a88b](https://github.com/Faolain/peerbit/commit/d97a88b1a4a9090a8ad36dc5bdcb05bfa0b84131))
+* implement onResults ([d996109](https://github.com/Faolain/peerbit/commit/d99610903d1022db01111d26fecd7b3129432ae2))
+* improve logs and testing ([4e71e9a](https://github.com/Faolain/peerbit/commit/4e71e9a98e2bb506d70723f7c2d4aa46638ef42f))
+* improved logging ([9867467](https://github.com/Faolain/peerbit/commit/9867467ccd1efedbf83bc94cfc1d48f06490a6bf))
+* lazy init of abort controllers and index cache in iterator ([1e77ff4](https://github.com/Faolain/peerbit/commit/1e77ff400b179f4728f406e4d8ea1ed6b8bb61a8))
+* local only iteration ([1c918e0](https://github.com/Faolain/peerbit/commit/1c918e0569c41e4d19531b52f3540bc684d06054))
+* make it possible to drain the iterator on change ([459ef03](https://github.com/Faolain/peerbit/commit/459ef031261b74ec42706da06f5e6a5df942183e))
+* only signal onChange updates on relevant changes ([a422f1f](https://github.com/Faolain/peerbit/commit/a422f1f9092c8e3d7d6220a75c5e567801e46d35))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* relase config and restore versions ([04ba9f6](https://github.com/Faolain/peerbit/commit/04ba9f6942a8aed24fc8c7f26637599c0595d621))
+* remote wait with blocking behaviour ([4f37fd2](https://github.com/Faolain/peerbit/commit/4f37fd2551c1b18de8ddbce8b5d0f85d180ff858))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* scope/reach simplfy api ([37206ea](https://github.com/Faolain/peerbit/commit/37206ea512338f7b913fee9482a7250ccee03ec9))
+* update deps ([9d4bb63](https://github.com/Faolain/peerbit/commit/9d4bb6388339404fad1f1bb39100f096d6d9fbf3))
+* update resolve handling in DocumentIndex and add tests for onResults behavior ([70f50dc](https://github.com/Faolain/peerbit/commit/70f50dcc6e74567d63072aa20e016b8a8647253b))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Documentation
+
+* add comment ([fd84d12](https://github.com/Faolain/peerbit/commit/fd84d12360ebf4aace0e275b47d45fb2e362e1cc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/cache bumped to 2.3.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/log bumped to 6.0.0
+    * @peerbit/pubsub bumped to 4.2.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/rpc bumped to 5.5.0
+    * @peerbit/shared-log bumped to 13.0.0
+    * @peerbit/indexer-interface bumped to 2.2.0
+    * @peerbit/indexer-simple bumped to 1.3.0
+    * @peerbit/indexer-sqlite3 bumped to 3.0.0
+    * @peerbit/document-interface bumped to 4.0.0
+    * @peerbit/indexer-cache bumped to 0.3.0
+    * @peerbit/stream-interface bumped to 5.5.0
+  * devDependencies
+    * @peerbit/test-utils bumped to 2.4.0
+    * @peerbit/time bumped to 2.4.0
+    * peerbit bumped to 4.5.0
+
 ## [12.3.5](https://github.com/dao-xyz/peerbit/compare/document-v12.3.4...document-v12.3.5) (2026-01-27)
 
 

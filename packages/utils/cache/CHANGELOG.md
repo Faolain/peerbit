@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.3.0](https://github.com/Faolain/peerbit/compare/cache-v2.2.0...cache-v2.3.0) (2026-02-05)
+
+
+### Features
+
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @peerbit/time bumped to 2.4.0
+
 ## [2.2.0](https://github.com/dao-xyz/peerbit/compare/cache-v2.1.5...cache-v2.2.0) (2025-11-25)
 
 

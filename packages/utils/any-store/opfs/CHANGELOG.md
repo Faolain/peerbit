@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.2.0](https://github.com/Faolain/peerbit/compare/any-store-opfs-v1.1.3...any-store-opfs-v1.2.0) (2026-02-05)
+
+
+### Features
+
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* unify asset bundling into dist/assets for asset generating packages ([5d6612c](https://github.com/Faolain/peerbit/commit/5d6612c726f5eebbf5e05cc082a1fca16831e9e2))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* bundle as classic worker ([20fc6e6](https://github.com/Faolain/peerbit/commit/20fc6e6571676defbd0a7a1c18eb14ce423a7ff2))
+* module bundling ([3797bbc](https://github.com/Faolain/peerbit/commit/3797bbc3782717a85bd26790924a49730f1d1076))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* Uint8array inner generic type ([db9a39b](https://github.com/Faolain/peerbit/commit/db9a39bed8501a45212d6130ffeed455422fa613))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/time bumped to 2.4.0
+    * @peerbit/any-store-interface bumped to 1.2.0
+
 ## [1.1.3](https://github.com/dao-xyz/peerbit/compare/any-store-opfs-v1.1.2...any-store-opfs-v1.1.3) (2025-12-30)
 
 

@@ -452,6 +452,61 @@
   * devDependencies
     * @peerbit/test-utils bumped from 2.0.31 to 2.0.32
 
+## [5.11.0](https://github.com/Faolain/peerbit/compare/server-v5.10.14...server-v5.11.0) (2026-02-05)
+
+
+### Features
+
+* add hetzner ([3efd4af](https://github.com/Faolain/peerbit/commit/3efd4af1a1b4a1b17ca582bd88b8ea052895b42c))
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* add self update command ([aeb9685](https://github.com/Faolain/peerbit/commit/aeb96855704c7f72a73ee14bae1c12608f222607))
+* add stats endpoint to retrieve connection and dial queue information ([5d4e53c](https://github.com/Faolain/peerbit/commit/5d4e53c2f4ed68975b260a1792112522b4e26f70))
+* add uninstall command ([6611d7c](https://github.com/Faolain/peerbit/commit/6611d7cafc5d01fa8932c98709cfaa85bda34cdd))
+* add webrtc direct support ([ec49bca](https://github.com/Faolain/peerbit/commit/ec49bca97650b46c6ab412544c7c1af44b4914c5))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* support to launch server with specific version ([4135175](https://github.com/Faolain/peerbit/commit/4135175b68b9096a9dcbcbe63c005a32728d1afa))
+
+
+### Bug Fixes
+
+* add describe instanceid timeout ([45d41e8](https://github.com/Faolain/peerbit/commit/45d41e85202c6c7611ca342faa9f6a4512c01f6c))
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* bump axios ([40eedc0](https://github.com/Faolain/peerbit/commit/40eedc0f5c9784a05a95bf2ca1ef1997961eed2e))
+* clean up formatting and add stats command to CLI ([2f6fc7f](https://github.com/Faolain/peerbit/commit/2f6fc7f1e88b88b0f4bf754a500e186344a6b6b5))
+* disable reconnections by default ([4a6b62b](https://github.com/Faolain/peerbit/commit/4a6b62b92d72713ff37db390f3c78afd28ecdff3))
+* force libsodium 0.7.15 tmp ([663c997](https://github.com/Faolain/peerbit/commit/663c997100237cebcfc28bd782cd4057ab22e8d6))
+* handle certificate renewal ([a4bcfcf](https://github.com/Faolain/peerbit/commit/a4bcfcffba0c2fd6215fe42f87b738f186d898cc))
+* improve self-update restarting behavoiur when existing program are re-opened ([325a063](https://github.com/Faolain/peerbit/commit/325a063192b0b1bb0620816cac7326a4101fab3c))
+* improved isNode check ([ae77b95](https://github.com/Faolain/peerbit/commit/ae77b95daae97df250cc88a592cd802a94ef9b45))
+* migrate to libp2p v3 ([9a8bbf9](https://github.com/Faolain/peerbit/commit/9a8bbf9d494064908194e8ee17643089c8273a80))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* remove dev dep ([633b9ba](https://github.com/Faolain/peerbit/commit/633b9bad18c991e50e078bc9213fe1d3ab89ae3e))
+* remove stream block from nginx config and update announce/listen addresses for libp2p ([58d3d09](https://github.com/Faolain/peerbit/commit/58d3d094c41618537995c24d11cfc72dd8a6f49e))
+* requeire email on remote domain spawn and always trust self ([9b0640c](https://github.com/Faolain/peerbit/commit/9b0640c670eaff598667db71a5f5a7eb0a4dd6fa))
+* restart command ([d333491](https://github.com/Faolain/peerbit/commit/d3334916b11982dcdea5c6c2b269511ff0a34744))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* revert email change ([c30b40f](https://github.com/Faolain/peerbit/commit/c30b40fede167e75cf600ca5aa0a088a9c1e71b7))
+* rm unused imports ([f9823a0](https://github.com/Faolain/peerbit/commit/f9823a05fb0a071ee439d9feb605d5a3796eee54))
+* **server:** handle unhandled promise rejections and uncaught exceptions ([7ec5e7a](https://github.com/Faolain/peerbit/commit/7ec5e7ae424397802cd86d5a8899c29bbd5b5c78))
+* test teardown ([44aa57d](https://github.com/Faolain/peerbit/commit/44aa57d8c7ad34c386b9c72ce8308081006d25f0))
+* tmp disable webrtc direct ([d25431a](https://github.com/Faolain/peerbit/commit/d25431a71d35fa55c51b00194248d329f3edaa70))
+* type casting ([8f8f903](https://github.com/Faolain/peerbit/commit/8f8f903514ca196389f6087df1ea8e4a242ba691))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * peerbit bumped to 4.5.0
+    * @peerbit/blocks bumped to 3.2.0
+    * @peerbit/crypto bumped to 2.5.0
+    * @peerbit/program bumped to 5.7.0
+    * @peerbit/pubsub bumped to 4.2.0
+    * @peerbit/time bumped to 2.4.0
+  * devDependencies
+    * @peerbit/test-utils bumped to 2.4.0
+
 ## [5.10.14](https://github.com/dao-xyz/peerbit/compare/server-v5.10.13...server-v5.10.14) (2026-01-27)
 
 
