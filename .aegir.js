@@ -2,7 +2,9 @@
 import * as findUp from "find-up";
 import path from "path";
 
-const root = path.dirname(await findUp.findUp(".git", { type: "directory" }));
+const gitDir = await findUp.findUp(".git", { type: "directory" });
+const gitFile = gitDir ? null : await findUp.findUp(".git", { type: "file" });
+const root = path.dirname(gitDir ?? gitFile);
 
 export default {
 	// global options

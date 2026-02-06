@@ -520,6 +520,24 @@ export class SharedLog<
 
 	private latestReplicationInfoMessage!: Map<string, bigint>;
 
+	// Per-peer queue to serialize replication-info processing (prevents TOCTOU race
+	// where two concurrent async handlers both see prevCount === 0 and emit duplicate
+	// replicator:join events).
+	private _replicationInfoQueue!: Map<string, Promise<void>>;
+
+	// Stores the latest replication-info message per peer when addReplicationRange()
+	// throws NotStartedError (indexes not ready). Drained in afterOpen().
+	private _pendingReplicationInfo!: Map<
+		string,
+		{
+			ranges: ReplicationRangeIndexable<any>[];
+			from: PublicSignKey;
+			reset: boolean;
+			timestamp: number;
+			messageTimestamp: bigint;
+		}
+	>;
+
 	private remoteBlocks!: RemoteBlocks;
 
 	private openTime!: number;
@@ -1281,6 +1299,7 @@ export class SharedLog<
 			diffs = changes;
 		}
 
+		const wasAlreadyReplicator = this.uniqueReplicators.has(from.hashcode());
 		this.uniqueReplicators.add(from.hashcode());
 
 		let now = +new Date();
@@ -1379,7 +1398,7 @@ export class SharedLog<
 				}),
 			);
 
-			if (isNewReplicator) {
+			if (isNewReplicator && !wasAlreadyReplicator) {
 				this.events.dispatchEvent(
 					new CustomEvent<ReplicatorJoinEvent>("replicator:join", {
 						detail: { publicKey: from },
@@ -1894,6 +1913,8 @@ export class SharedLog<
 		this._pendingDeletes = new Map();
 		this._pendingIHave = new Map();
 		this.latestReplicationInfoMessage = new Map();
+		this._replicationInfoQueue = new Map();
+		this._pendingReplicationInfo = new Map();
 		this.coordinateToHash = new Cache<string>({ max: 1e6, ttl: 1e4 });
 		this.recentlyRebalanced = new Cache<string>({ max: 1e4, ttl: 1e5 });
 
@@ -2245,6 +2266,27 @@ export class SharedLog<
 				this.handleSubscriptionChange(v, [this.topic], true);
 			},
 		);
+
+		// Drain replication-info messages that arrived before indexes were ready
+		if (this._pendingReplicationInfo.size > 0) {
+			const pending = new Map(this._pendingReplicationInfo);
+			this._pendingReplicationInfo.clear();
+			for (const [, info] of pending) {
+				try {
+					await this.addReplicationRange(info.ranges, info.from, {
+						reset: info.reset,
+						checkDuplicates: true,
+						timestamp: info.timestamp,
+					});
+				} catch (e: any) {
+					if (!isNotStartedError(e)) {
+						logger.error(
+							`Failed to apply pending replication info: ${e?.message ?? e}`,
+						);
+					}
+				}
+			}
+		}
 	}
 
 	async reset() {
@@ -2526,6 +2568,8 @@ export class SharedLog<
 		this._pendingDeletes.clear();
 		this._pendingIHave.clear();
 		this.latestReplicationInfoMessage.clear();
+		this._replicationInfoQueue.clear();
+		this._pendingReplicationInfo.clear();
 		this._gidPeersHistory.clear();
 		this._requestIPruneSent.clear();
 		this._requestIPruneResponseReplicatorSet.clear();
@@ -2968,43 +3012,68 @@ export class SharedLog<
 				// (and downstream `waitForReplicator()` timeouts) under timing-sensitive joins.
 				const from = context.from!;
 				const messageTimestamp = context.message.header.timestamp;
-				(async () => {
-					const prev = this.latestReplicationInfoMessage.get(from.hashcode());
-					if (prev && prev > messageTimestamp) {
-						return;
-					}
 
-					this.latestReplicationInfoMessage.set(
-						from.hashcode(),
-						messageTimestamp,
-					);
+				// Serialize replication-info processing per peer to prevent TOCTOU
+				// races where concurrent handlers both see prevCount === 0 and emit
+				// duplicate replicator:join events.
+				const peerHash = from.hashcode();
+				const prevWork =
+					this._replicationInfoQueue.get(peerHash) ?? Promise.resolve();
+				const work = prevWork
+					.then(async () => {
+						const prevTs =
+							this.latestReplicationInfoMessage.get(peerHash);
+						if (prevTs && prevTs > messageTimestamp) {
+							return;
+						}
 
-					if (this.closed) {
-						return;
-					}
+						this.latestReplicationInfoMessage.set(
+							peerHash,
+							messageTimestamp,
+						);
 
-					const reset = msg instanceof AllReplicatingSegmentsMessage;
-					await this.addReplicationRange(
-						replicationInfoMessage.segments.map((x) =>
+						if (this.closed) {
+							return;
+						}
+
+						const reset = msg instanceof AllReplicatingSegmentsMessage;
+						const ranges = replicationInfoMessage.segments.map((x) =>
 							x.toReplicationRangeIndexable(from),
-						),
-						from,
-						{
-							reset,
-							checkDuplicates: true,
-							timestamp: Number(messageTimestamp),
-						},
-					);
-				})().catch((e) => {
-					if (isNotStartedError(e)) {
-						return;
-					}
-					logger.error(
-						`Failed to apply replication settings from '${from.hashcode()}': ${
-							e?.message ?? e
-						}`,
-					);
-				});
+						);
+						try {
+							await this.addReplicationRange(ranges, from, {
+								reset,
+								checkDuplicates: true,
+								timestamp: Number(messageTimestamp),
+							});
+							// Successful — clear any stored pending info for this peer
+							this._pendingReplicationInfo.delete(peerHash);
+						} catch (e: any) {
+							if (isNotStartedError(e)) {
+								// Store for retry after indexes are ready
+								this._pendingReplicationInfo.set(peerHash, {
+									ranges,
+									from,
+									reset,
+									timestamp: Number(messageTimestamp),
+									messageTimestamp,
+								});
+								return;
+							}
+							throw e;
+						}
+					})
+					.catch((e) => {
+						if (isNotStartedError(e)) {
+							return;
+						}
+						logger.error(
+							`Failed to apply replication settings from '${peerHash}': ${
+								e?.message ?? e
+							}`,
+						);
+					});
+				this._replicationInfoQueue.set(peerHash, work);
 			} else if (msg instanceof StoppedReplicating) {
 				if (context.from.equals(this.node.identity.publicKey)) {
 					return;
