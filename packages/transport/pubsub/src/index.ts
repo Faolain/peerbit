@@ -183,6 +183,11 @@ export class DirectSub extends DirectStream<PubSubEvents> implements PubSub {
 	async unsubscribe(topic: string) {
 		if (this.debounceSubscribeAggregator.has(topic)) {
 			this.debounceSubscribeAggregator.delete(topic); // cancel subscription before it performed
+			// Clean up eagerly-initialized topic tracking from subscribe().
+			// Without this, the topics entry persists as an orphaned empty Map
+			// because _unsubscribe() is never called (nothing in subscriptions).
+			this.topics.delete(topic);
+			this.topicsToPeers.delete(topic);
 			return false;
 		}
 		const subscriptions = this.subscriptions.get(topic);
