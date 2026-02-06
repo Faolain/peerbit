@@ -3673,45 +3673,57 @@ export class SharedLog<
 		replicas: number;
 		prev?: EntryReplicated<R>;
 	}) {
-		let assignedToRangeBoundary = shouldAssignToRangeBoundary(
-			properties.leaders,
-			properties.replicas,
-		);
+		// Guard against TOCTOU race: _close() may complete between the caller's
+		// !this.closed check and this method's execution, tearing down indices.
+		if (this.closed) return;
+		if (!this._entryCoordinatesIndex) return;
+		if (!this._replicationRangeIndex) return;
 
-		if (
-			properties.prev &&
-			properties.prev.assignedToRangeBoundary === assignedToRangeBoundary
-		) {
-			return; // no change
-		}
+		try {
+			let assignedToRangeBoundary = shouldAssignToRangeBoundary(
+				properties.leaders,
+				properties.replicas,
+			);
 
-		const cidObject = cidifyString(properties.entry.hash);
-		const hashNumber = this.indexableDomain.numbers.bytesToNumber(
-			cidObject.multihash.digest,
-		);
+			if (
+				properties.prev &&
+				properties.prev.assignedToRangeBoundary === assignedToRangeBoundary
+			) {
+				return; // no change
+			}
 
-		await this.entryCoordinatesIndex.put(
-			new this.indexableDomain.constructorEntry({
-				assignedToRangeBoundary,
-				coordinates: properties.coordinates,
-				meta: properties.entry.meta,
-				hash: properties.entry.hash,
-				hashNumber,
-			}),
-		);
+			const cidObject = cidifyString(properties.entry.hash);
+			const hashNumber = this.indexableDomain.numbers.bytesToNumber(
+				cidObject.multihash.digest,
+			);
 
-		for (const coordinate of properties.coordinates) {
-			this.coordinateToHash.add(coordinate, properties.entry.hash);
-		}
+			await this.entryCoordinatesIndex.put(
+				new this.indexableDomain.constructorEntry({
+					assignedToRangeBoundary,
+					coordinates: properties.coordinates,
+					meta: properties.entry.meta,
+					hash: properties.entry.hash,
+					hashNumber,
+				}),
+			);
 
-		if (properties.entry.meta.next.length > 0) {
-			await this.entryCoordinatesIndex.del({
-				query: new Or(
-					properties.entry.meta.next.map(
-						(x) => new StringMatch({ key: "hash", value: x }),
+			for (const coordinate of properties.coordinates) {
+				this.coordinateToHash.add(coordinate, properties.entry.hash);
+			}
+
+			if (properties.entry.meta.next.length > 0) {
+				await this.entryCoordinatesIndex.del({
+					query: new Or(
+						properties.entry.meta.next.map(
+							(x) => new StringMatch({ key: "hash", value: x }),
+						),
 					),
-				),
-			});
+				});
+			}
+		} catch (err) {
+			// If closed by the time error fires, this was a shutdown race
+			if (this.closed) return;
+			throw err;
 		}
 	}
 
