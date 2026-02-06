@@ -468,6 +468,11 @@ export class SharedLog<
 
 	uniqueReplicators!: Set<string>;
 	private _replicatorsReconciled!: boolean;
+	private _subscribedPeers!: Set<string>;
+	private _pendingReplicationInfoRequestTimers!: Map<
+		string,
+		ReturnType<typeof setTimeout>
+	>;
 
 	/* private _totalParticipation!: number; */
 
@@ -518,9 +523,20 @@ export class SharedLog<
 		>
 	>; // map of peerId to timeout
 
-	private latestReplicationInfoMessage!: Map<string, bigint>;
+		private latestReplicationInfoMessage!: Map<string, bigint>;
+		private _replicationInfoApplyQueue!: Map<string, Promise<void>>;
+		private _pendingReplicationInfoMessages!: Map<
+			string,
+			{
+				from: PublicSignKey;
+				message:
+					| AllReplicatingSegmentsMessage
+					| AddedReplicationSegmentMessage;
+				timestamp: bigint;
+			}
+		>;
 
-	private remoteBlocks!: RemoteBlocks;
+		private remoteBlocks!: RemoteBlocks;
 
 	private openTime!: number;
 	private oldestOpenTime!: number;
@@ -1150,26 +1166,28 @@ export class SharedLog<
 			checkDuplicates?: boolean;
 			timestamp?: number;
 		} = {},
-	) {
-		if (this._isTrustedReplicator && !(await this._isTrustedReplicator(from))) {
-			return undefined;
-		}
-		let isNewReplicator = false;
-		let timestamp = BigInt(ts ?? +new Date());
-		rebalance = rebalance == null ? true : rebalance;
+		) {
+			if (this._isTrustedReplicator && !(await this._isTrustedReplicator(from))) {
+				return undefined;
+			}
+			const fromHash = from.hashcode();
+			let isNewReplicator = false;
+			let timestamp = BigInt(ts ?? +new Date());
+			rebalance = rebalance == null ? true : rebalance;
 
-		let diffs: ReplicationChanges<ReplicationRangeIndexable<R>>;
-		let deleted: ReplicationRangeIndexable<R>[] | undefined = undefined;
-		if (reset) {
-			deleted = (
-				await this.replicationIndex
-					.iterate({
-						query: { hash: from.hashcode() },
-					})
-					.all()
-			).map((x) => x.value);
+			let diffs: ReplicationChanges<ReplicationRangeIndexable<R>>;
+			let deleted: ReplicationRangeIndexable<R>[] | undefined = undefined;
+			let willHaveSegmentsAfterApply = false;
+			if (reset) {
+				deleted = (
+					await this.replicationIndex
+						.iterate({
+							query: { hash: fromHash },
+						})
+						.all()
+				).map((x) => x.value);
 
-			let prevCount = deleted.length;
+				const prevCount = deleted.length;
 
 			const existingById = new Map(deleted.map((x) => [x.idString, x]));
 			const hasSameRanges =
@@ -1180,27 +1198,30 @@ export class SharedLog<
 				});
 
 			// Avoid churn on repeated full-state announcements that don't change any
-			// replication ranges. This prevents unnecessary `replication:change`
-			// events and rebalancing cascades.
-			if (hasSameRanges) {
-				diffs = [];
+				// replication ranges. This prevents unnecessary `replication:change`
+				// events and rebalancing cascades.
+				if (hasSameRanges) {
+					diffs = [];
+					willHaveSegmentsAfterApply = prevCount > 0;
+				} else {
+					await this.replicationIndex.del({ query: { hash: fromHash } });
+
+					diffs = [
+						...deleted.map((x) => {
+							return { range: x, type: "removed" as const, timestamp };
+						}),
+						...ranges.map((x) => {
+							return { range: x, type: "added" as const, timestamp };
+						}),
+					];
+
+					willHaveSegmentsAfterApply = ranges.length > 0;
+				}
+
+				isNewReplicator = prevCount === 0 && ranges.length > 0;
 			} else {
-				await this.replicationIndex.del({ query: { hash: from.hashcode() } });
-
-				diffs = [
-					...deleted.map((x) => {
-						return { range: x, type: "removed" as const, timestamp };
-					}),
-					...ranges.map((x) => {
-						return { range: x, type: "added" as const, timestamp };
-					}),
-				];
-			}
-
-			isNewReplicator = prevCount === 0 && ranges.length > 0;
-		} else {
-			let batchSize = 100;
-			let existing: ReplicationRangeIndexable<R>[] = [];
+				let batchSize = 100;
+				let existing: ReplicationRangeIndexable<R>[] = [];
 			for (let i = 0; i < ranges.length; i += batchSize) {
 				const results = await this.replicationIndex
 					.iterate(
@@ -1218,15 +1239,15 @@ export class SharedLog<
 				}
 			}
 
-			let prevCountForOwner: number | undefined = undefined;
-			if (existing.length === 0) {
-				prevCountForOwner = await this.replicationIndex.count({
-					query: new StringMatch({ key: "hash", value: from.hashcode() }),
-				});
-				isNewReplicator = prevCountForOwner === 0;
-			} else {
-				isNewReplicator = false;
-			}
+				let prevCountForOwner: number | undefined = undefined;
+				if (existing.length === 0) {
+					prevCountForOwner = await this.replicationIndex.count({
+						query: new StringMatch({ key: "hash", value: fromHash }),
+					});
+					isNewReplicator = prevCountForOwner === 0;
+				} else {
+					isNewReplicator = false;
+				}
 
 			if (
 				checkDuplicates &&
@@ -1276,16 +1297,18 @@ export class SharedLog<
 							type: "added" as const,
 						};
 					}
-				})
-				.flat() as ReplicationChanges<ReplicationRangeIndexable<R>>;
-			diffs = changes;
-		}
+					})
+					.flat() as ReplicationChanges<ReplicationRangeIndexable<R>>;
+				diffs = changes;
 
-		this.uniqueReplicators.add(from.hashcode());
+				const hadSegmentsBefore =
+					(prevCountForOwner ?? 0) > 0 || existing.some((x) => x.hash === fromHash);
+				willHaveSegmentsAfterApply = hadSegmentsBefore || ranges.length > 0;
+			}
 
-		let now = +new Date();
-		let minRoleAge = await this.getDefaultMinRoleAge();
-		let isAllMature = true;
+			let now = +new Date();
+			let minRoleAge = await this.getDefaultMinRoleAge();
+			let isAllMature = true;
 
 		for (const diff of diffs) {
 			if (diff.type === "added") {
@@ -1365,13 +1388,21 @@ export class SharedLog<
 					}
 				}
 			}
-			// else replaced, do nothing
-		}
-
-		if (diffs.length > 0) {
-			if (reset) {
-				await this.updateOldestTimestampFromIndex();
+				// else replaced, do nothing
 			}
+
+			// Keep `uniqueReplicators` consistent with the persisted replication index.
+			// (Avoids "replicator present" signals before index changes are durable.)
+			if (willHaveSegmentsAfterApply) {
+				this.uniqueReplicators.add(fromHash);
+			} else {
+				this.uniqueReplicators.delete(fromHash);
+			}
+
+			if (diffs.length > 0) {
+				if (reset) {
+					await this.updateOldestTimestampFromIndex();
+				}
 
 			this.events.dispatchEvent(
 				new CustomEvent<ReplicationChangeEvent>("replication:change", {
@@ -1890,15 +1921,19 @@ export class SharedLog<
 		this.indexableDomain = createIndexableDomainFromResolution(
 			this.domain.resolution,
 		);
-		this._respondToIHaveTimeout = options?.respondToIHaveTimeout ?? 2e4;
-		this._pendingDeletes = new Map();
-		this._pendingIHave = new Map();
-		this.latestReplicationInfoMessage = new Map();
-		this.coordinateToHash = new Cache<string>({ max: 1e6, ttl: 1e4 });
-		this.recentlyRebalanced = new Cache<string>({ max: 1e4, ttl: 1e5 });
+			this._respondToIHaveTimeout = options?.respondToIHaveTimeout ?? 2e4;
+			this._pendingDeletes = new Map();
+			this._pendingIHave = new Map();
+			this.latestReplicationInfoMessage = new Map();
+			this._replicationInfoApplyQueue = new Map();
+			this._pendingReplicationInfoMessages = new Map();
+			this.coordinateToHash = new Cache<string>({ max: 1e6, ttl: 1e4 });
+			this.recentlyRebalanced = new Cache<string>({ max: 1e4, ttl: 1e5 });
 
 		this.uniqueReplicators = new Set();
 		this._replicatorsReconciled = false;
+		this._subscribedPeers = new Set();
+		this._pendingReplicationInfoRequestTimers = new Map();
 
 		this.openTime = +new Date();
 		this.oldestOpenTime = this.openTime;
@@ -2216,8 +2251,8 @@ export class SharedLog<
 		}
 	}
 
-	async afterOpen(): Promise<void> {
-		await super.afterOpen();
+		async afterOpen(): Promise<void> {
+			await super.afterOpen();
 
 		// We do this here, because these calls requires this.closed == false
 		void this.pruneOfflineReplicators()
@@ -2234,22 +2269,128 @@ export class SharedLog<
 		await this.rebalanceParticipation();
 
 		// Take into account existing subscription
-		(await this.node.services.pubsub.getSubscribers(this.topic))?.forEach(
-			(v, k) => {
-				if (v.equals(this.node.identity.publicKey)) {
+			(await this.node.services.pubsub.getSubscribers(this.topic))?.forEach(
+				(v, k) => {
+					if (v.equals(this.node.identity.publicKey)) {
+						return;
+					}
+					if (this.closed) {
+						return;
+					}
+					this.handleSubscriptionChange(v, [this.topic], true);
+				},
+			);
+
+			// Replication-info messages can arrive early during startup (especially with
+			// faster pubsub subscription discovery). If applying replication info fails
+			// due to indices not being started yet, we buffer the latest message per peer
+			// and retry here once we're fully open.
+			await this._drainPendingReplicationInfoMessages();
+		}
+
+		private _enqueueApplyReplicationInfo(
+			from: PublicSignKey,
+			message:
+				| AllReplicatingSegmentsMessage
+				| AddedReplicationSegmentMessage,
+			messageTimestamp: bigint,
+		): Promise<void> {
+			const fromHash = from.hashcode();
+
+			const apply = async (): Promise<void> => {
+				const prevApplied = this.latestReplicationInfoMessage.get(fromHash);
+				if (prevApplied != null && prevApplied > messageTimestamp) {
 					return;
 				}
+
 				if (this.closed) {
 					return;
 				}
-				this.handleSubscriptionChange(v, [this.topic], true);
-			},
-		);
-	}
 
-	async reset() {
-		await this.log.load({ reset: true });
-	}
+				// If we received replication info, we don't need a pending request timer anymore.
+				this._clearPendingReplicationInfoRequest(fromHash);
+
+				const reset = message instanceof AllReplicatingSegmentsMessage;
+				const bufferForRetry = () => {
+					const prevPending = this._pendingReplicationInfoMessages.get(fromHash);
+					if (prevPending == null || prevPending.timestamp < messageTimestamp) {
+						this._pendingReplicationInfoMessages.set(fromHash, {
+							from,
+							message,
+							timestamp: messageTimestamp,
+						});
+					}
+				};
+				try {
+					// If indices are not started yet, avoid partially mutating state in
+					// `addReplicationRange()`; buffer and retry once we're fully open.
+					await this.replicationIndex.getSize();
+
+					await this.addReplicationRange(
+						message.segments.map((x) => x.toReplicationRangeIndexable(from)),
+						from,
+						{
+							reset,
+							checkDuplicates: true,
+							timestamp: Number(messageTimestamp),
+						},
+					);
+
+					const currentApplied = this.latestReplicationInfoMessage.get(fromHash);
+					if (currentApplied == null || currentApplied < messageTimestamp) {
+						this.latestReplicationInfoMessage.set(fromHash, messageTimestamp);
+					}
+				} catch (e) {
+					if (isNotStartedError(e as Error)) {
+						bufferForRetry();
+						return;
+					}
+					throw e;
+				}
+			};
+
+			const previous =
+				this._replicationInfoApplyQueue.get(fromHash) ?? Promise.resolve();
+			const next = previous.catch(() => {}).then(apply);
+			this._replicationInfoApplyQueue.set(fromHash, next);
+			void next
+				.finally(() => {
+					if (this._replicationInfoApplyQueue.get(fromHash) === next) {
+						this._replicationInfoApplyQueue.delete(fromHash);
+					}
+				})
+				.catch(() => {
+					// Errors are handled by callers; prevent unhandled rejection noise.
+				});
+			return next;
+		}
+
+		private async _drainPendingReplicationInfoMessages(): Promise<void> {
+			if (this.closed || this._pendingReplicationInfoMessages.size === 0) {
+				return;
+			}
+
+			const pending = [...this._pendingReplicationInfoMessages.values()];
+			this._pendingReplicationInfoMessages.clear();
+
+			await Promise.all(
+				pending.map((p) =>
+					this._enqueueApplyReplicationInfo(p.from, p.message, p.timestamp).catch(
+						(e) => {
+							logger.error(
+								`Failed to apply buffered replication settings from '${p.from.hashcode()}': ${
+									e?.message ?? e
+								}`,
+							);
+						},
+					),
+				),
+			);
+		}
+
+		async reset() {
+			await this.log.load({ reset: true });
+		}
 
 	async pruneOfflineReplicators() {
 		// go through all segments and for waitForAll replicators to become reachable if not prune them away
@@ -2522,13 +2663,15 @@ export class SharedLog<
 			v.clear();
 		}
 
-		await this.remoteBlocks.stop();
-		this._pendingDeletes.clear();
-		this._pendingIHave.clear();
-		this.latestReplicationInfoMessage.clear();
-		this._gidPeersHistory.clear();
-		this._requestIPruneSent.clear();
-		this._requestIPruneResponseReplicatorSet.clear();
+			await this.remoteBlocks.stop();
+			this._pendingDeletes.clear();
+			this._pendingIHave.clear();
+			this.latestReplicationInfoMessage.clear();
+			this._replicationInfoApplyQueue.clear();
+			this._pendingReplicationInfoMessages.clear();
+			this._gidPeersHistory.clear();
+			this._requestIPruneSent.clear();
+			this._requestIPruneResponseReplicatorSet.clear();
 		this.pruneDebouncedFn = undefined as any;
 		this.rebalanceParticipationDebounced = undefined;
 		this._replicationRangeIndex.stop();
@@ -2964,51 +3107,25 @@ export class SharedLog<
 					| AddedReplicationSegmentMessage;
 
 				// Process replication updates even if the sender isn't yet considered "ready" by
-				// `Program.waitFor()`. Dropping these messages can lead to missing replicator info
-				// (and downstream `waitForReplicator()` timeouts) under timing-sensitive joins.
-				const from = context.from!;
-				const messageTimestamp = context.message.header.timestamp;
-				(async () => {
-					const prev = this.latestReplicationInfoMessage.get(from.hashcode());
-					if (prev && prev > messageTimestamp) {
-						return;
-					}
-
-					this.latestReplicationInfoMessage.set(
-						from.hashcode(),
-						messageTimestamp,
-					);
-
-					if (this.closed) {
-						return;
-					}
-
-					const reset = msg instanceof AllReplicatingSegmentsMessage;
-					await this.addReplicationRange(
-						replicationInfoMessage.segments.map((x) =>
-							x.toReplicationRangeIndexable(from),
-						),
+					// `Program.waitFor()`. Dropping these messages can lead to missing replicator info
+					// (and downstream `waitForReplicator()` timeouts) under timing-sensitive joins.
+					const from = context.from!;
+					const messageTimestamp = context.message.header.timestamp;
+					void this._enqueueApplyReplicationInfo(
 						from,
-						{
-							reset,
-							checkDuplicates: true,
-							timestamp: Number(messageTimestamp),
-						},
-					);
-				})().catch((e) => {
-					if (isNotStartedError(e)) {
+						replicationInfoMessage,
+						messageTimestamp,
+					).catch((e) => {
+						logger.error(
+							`Failed to apply replication settings from '${from.hashcode()}': ${
+								e?.message ?? e
+							}`,
+						);
+					});
+				} else if (msg instanceof StoppedReplicating) {
+					if (context.from.equals(this.node.identity.publicKey)) {
 						return;
 					}
-					logger.error(
-						`Failed to apply replication settings from '${from.hashcode()}': ${
-							e?.message ?? e
-						}`,
-					);
-				});
-			} else if (msg instanceof StoppedReplicating) {
-				if (context.from.equals(this.node.identity.publicKey)) {
-					return;
-				}
 
 				const rangesToRemove = await this.resolveReplicationRangesFromIdsAndKey(
 					msg.segmentIds,
@@ -3913,6 +4030,51 @@ export class SharedLog<
 		);
 	}
 
+	private _clearPendingReplicationInfoRequest(peerHash: string) {
+		const timer = this._pendingReplicationInfoRequestTimers.get(peerHash);
+		if (timer != null) {
+			clearTimeout(timer);
+			this._pendingReplicationInfoRequestTimers.delete(peerHash);
+		}
+	}
+
+	private _scheduleRequestReplicationInfo(peer: PublicSignKey) {
+		const peerHash = peer.hashcode();
+		if (this.latestReplicationInfoMessage.get(peerHash) != null) {
+			return;
+		}
+		if (this._pendingReplicationInfoRequestTimers.has(peerHash)) {
+			return;
+		}
+
+		// Often the peer will proactively announce its replication segments right after
+		// subscribing. Delay the request a bit to avoid redundant request/response pairs
+		// (and to reduce the chance of racy overwrites during startup).
+		const REQUEST_DELAY_MS = 100;
+
+		const timer = setTimeout(() => {
+			this._pendingReplicationInfoRequestTimers.delete(peerHash);
+
+			if (this.closed || !this._subscribedPeers.has(peerHash)) {
+				return;
+			}
+
+			// We might have learned their replication info before the subscription event
+			// handler ran; avoid sending a redundant request in that race.
+			if (this.latestReplicationInfoMessage.get(peerHash) != null) {
+				return;
+			}
+
+			this.rpc
+				.send(new RequestReplicationInfoMessage(), {
+					mode: new SeekDelivery({ redundancy: 1, to: [peer] }),
+				})
+				.catch((e) => logger.error(e.toString()));
+		}, REQUEST_DELAY_MS);
+
+		this._pendingReplicationInfoRequestTimers.set(peerHash, timer);
+	}
+
 	async handleSubscriptionChange(
 		publicKey: PublicSignKey,
 		topics: string[],
@@ -3922,18 +4084,34 @@ export class SharedLog<
 			return;
 		}
 
+		const peerHash = publicKey.hashcode();
+
+		// Pubsub subscription events can be emitted multiple times for the same peer
+		// during startup (and we also reconcile existing subscribers in `afterOpen()`).
+		// Make this handler idempotent so we don't spam replication-info requests and
+		// duplicate full-state announcements.
+		if (subscribed) {
+			if (this._subscribedPeers.has(peerHash)) {
+				return;
+			}
+			this._subscribedPeers.add(peerHash);
+		} else {
+			this._subscribedPeers.delete(peerHash);
+			this._clearPendingReplicationInfoRequest(peerHash);
+		}
+
 		if (!subscribed) {
-			this.removePeerFromGidPeerHistory(publicKey.hashcode());
+			this.removePeerFromGidPeerHistory(peerHash);
 
 			for (const [k, v] of this._requestIPruneSent) {
-				v.delete(publicKey.hashcode());
+				v.delete(peerHash);
 				if (v.size === 0) {
 					this._requestIPruneSent.delete(k);
 				}
 			}
 
 			for (const [k, v] of this._requestIPruneResponseReplicatorSet) {
-				v.delete(publicKey.hashcode());
+				v.delete(peerHash);
 				if (v.size === 0) {
 					this._requestIPruneResponseReplicatorSet.delete(k);
 				}
@@ -3942,7 +4120,7 @@ export class SharedLog<
 			this.syncronizer.onPeerDisconnected(publicKey);
 
 			(await this.replicationIndex.count({
-				query: { hash: publicKey.hashcode() },
+				query: { hash: peerHash },
 			})) > 0 &&
 				this.events.dispatchEvent(
 					new CustomEvent<ReplicatorLeaveEvent>("replicator:leave", {
@@ -3978,11 +4156,7 @@ export class SharedLog<
 			// Request the remote peer's replication info. This makes joins resilient to
 			// timing-sensitive delivery/order issues where we may miss their initial
 			// replication announcement.
-			this.rpc
-				.send(new RequestReplicationInfoMessage(), {
-					mode: new SeekDelivery({ redundancy: 1, to: [publicKey] }),
-				})
-				.catch((e) => logger.error(e.toString()));
+			this._scheduleRequestReplicationInfo(publicKey);
 		} else {
 			await this.removeReplicator(publicKey);
 		}
@@ -4433,16 +4607,17 @@ export class SharedLog<
 	}
 
 	async _onUnsubscription(evt: CustomEvent<UnsubcriptionEvent>) {
-		logger.trace(
-			`Peer disconnected '${evt.detail.from.hashcode()}' from '${JSON.stringify(
-				evt.detail.topics.map((x) => x),
-			)} '`,
-		);
-		this.latestReplicationInfoMessage.delete(evt.detail.from.hashcode());
+			logger.trace(
+				`Peer disconnected '${evt.detail.from.hashcode()}' from '${JSON.stringify(
+					evt.detail.topics.map((x) => x),
+				)} '`,
+			);
+			this.latestReplicationInfoMessage.delete(evt.detail.from.hashcode());
+			this._pendingReplicationInfoMessages.delete(evt.detail.from.hashcode());
 
-		return this.handleSubscriptionChange(
-			evt.detail.from,
-			evt.detail.topics,
+			return this.handleSubscriptionChange(
+				evt.detail.from,
+				evt.detail.topics,
 			false,
 		);
 	}
