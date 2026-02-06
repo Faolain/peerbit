@@ -997,6 +997,8 @@ export class SharedLog<
 		key: PublicSignKey | string,
 		options?: { noEvent?: boolean },
 	) {
+		if (this.closed) return;
+
 		const keyHash = typeof key === "string" ? key : key.hashcode();
 		const deleted = await this.replicationIndex
 			.iterate({
@@ -3673,6 +3675,11 @@ export class SharedLog<
 		replicas: number;
 		prev?: EntryReplicated<R>;
 	}) {
+		if (this.closed) return;
+		if (!this.entryCoordinatesIndex) return;
+		if (!this._replicationRangeIndex) return;
+
+		try {
 		let assignedToRangeBoundary = shouldAssignToRangeBoundary(
 			properties.leaders,
 			properties.replicas,
@@ -3712,6 +3719,9 @@ export class SharedLog<
 					),
 				),
 			});
+		}
+		} catch (e: any) {
+			if (!this.closed) throw e;
 		}
 	}
 
@@ -3918,6 +3928,8 @@ export class SharedLog<
 		topics: string[],
 		subscribed: boolean,
 	) {
+		if (this.closed) return;
+
 		if (!topics.includes(this.topic)) {
 			return;
 		}
@@ -4463,6 +4475,8 @@ export class SharedLog<
 	}
 
 	async rebalanceParticipation() {
+		if (this.closed) return false;
+
 		// update more participation rate to converge to the average expected rate or bounded by
 		// resources such as memory and or cpu
 
