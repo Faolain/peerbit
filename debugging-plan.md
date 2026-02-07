@@ -142,6 +142,21 @@ Last updated: 2026-02-06
 - PASS (WT-B / prod fix): `PEERBIT_TEST_SESSION=mock pnpm run test:ci:part-2`.
 - PASS (WT-A / strict churn, stress): `for i in {1..10}; do PEERBIT_TEST_SESSION=mock pnpm --filter @peerbit/document test -- --grep "strict search under churn" || break; done` (10/10).
 - FAIL (master baseline, stress): `for i in {1..25}; do PEERBIT_TEST_SESSION=mock pnpm --filter @peerbit/document test -- --grep "can search while keeping minimum amount of replicas" || break; done` failed at iteration 9/25 with `997 < 1000` and log lengths `[997,98,544]`.
+- FAIL (master baseline, stress x100): `for i in {1..100}; do PEERBIT_TEST_SESSION=mock pnpm --filter @peerbit/document test -- --grep "can search while keeping minimum amount of replicas"; done` produced `passes=96 fails=4` with failure iterations/signatures:
+  - `FAIL 37: Failed to collect all messages 997 < 1000. Log lengths: [997,103,602]`
+  - `FAIL 39: Failed to collect all messages 997 < 1000. Log lengths: [997,103,602]`
+  - `FAIL 67: Failed to collect all messages 472 < 1000. Log lengths: [1000,472,578]`
+  - `FAIL 94: Failed to collect all messages 618 < 1000. Log lengths: [997,434,618]`
+- FAIL (WT-B / prod fix, stress x100): same loop on branch `fix/search-convergence-under-churn` produced `passes=91 fails=9` with failure iterations/signatures:
+  - `FAIL 17: Failed to collect all messages 544 < 1000. Log lengths: [997,117,544]`
+  - `FAIL 26: Failed to collect all messages 590 < 1000. Log lengths: [998,90,590]`
+  - `FAIL 32: Failed to collect all messages 590 < 1000. Log lengths: [998,90,590]`
+  - `FAIL 41: Failed to collect all messages 465 < 1000. Log lengths: [1000,465,582]`
+  - `FAIL 44: Failed to collect all messages 465 < 1000. Log lengths: [1000,465,582]`
+  - `FAIL 48: Failed to collect all messages 553 < 1000. Log lengths: [998,110,553]`
+  - `FAIL 51: Failed to collect all messages 590 < 1000. Log lengths: [997,494,590]`
+  - `FAIL 61: Failed to collect all messages 997 < 1000. Log lengths: [997,106,585]`
+  - `FAIL 97: Failed to collect all messages 474 < 1000. Log lengths: [1000,474,553]`
 
 ## Next Steps
 
