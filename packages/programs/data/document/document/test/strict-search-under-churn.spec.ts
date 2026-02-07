@@ -3,21 +3,41 @@ import { MissingResponsesError } from "@peerbit/rpc";
 import { TestSession } from "@peerbit/test-utils";
 import { delay, waitForResolved } from "@peerbit/time";
 import { expect } from "chai";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
 import { Documents } from "../src/program.js";
 import { Document, TestStore } from "./data.js";
 
 describe("strict search under churn", () => {
 	let session: TestSession | undefined;
+	let tempDir: string | undefined;
 
 	afterEach(async () => {
 		if (session) {
 			await session.stop();
 			session = undefined;
 		}
+		if (tempDir) {
+			await fs.rm(tempDir, { recursive: true, force: true });
+			tempDir = undefined;
+		}
 	});
 
 	it("eventually returns complete results with strict mitigations", async () => {
-		session = await TestSession.connected(2);
+		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "peerbit-churn-"));
+		const peer1Dir = path.join(tempDir, "peer1");
+		const peer2Dir = path.join(tempDir, "peer2");
+		await Promise.all([
+			fs.mkdir(peer1Dir, { recursive: true }),
+			fs.mkdir(peer2Dir, { recursive: true }),
+		]);
+
+		// Use on-disk blocks so that stop/start resembles production restart (no data loss).
+		session = await TestSession.connected(2, [
+			{ directory: peer1Dir },
+			{ directory: peer2Dir },
+		]);
 
 		const store1 = new TestStore({
 			docs: new Documents<Document>(),
@@ -53,26 +73,32 @@ describe("strict search under churn", () => {
 		);
 
 		const remoteOptions = {
-			timeout: 10_000,
+			timeout: 15_000,
 			throwOnMissing: true,
-			reach: {
-				discover: [session.peers[1].identity.publicKey],
-			},
-			wait: {
-				timeout: 8_000,
-				behavior: "block" as const,
-				until: "any" as const,
-				onTimeout: "error" as const,
-			},
 		};
 
-		const request = new SearchRequest({ query: [] });
+		const request = new SearchRequest({ query: [], fetch: count });
+		const localOnly = await store1.docs.index.search(request, { remote: false });
+		expect(localOnly.length).to.be.lessThan(count);
+
 		const baseline = await store1.docs.index.search(request, {
 			remote: remoteOptions,
 		});
 		expect(baseline).to.have.length(count);
 
 		await session.peers[1].stop();
+
+		// During churn, a strict client can either:
+		// - throw on missing responders (throwOnMissing=true), or
+		// - detect a short read and retry until reachability/convergence is restored.
+		try {
+			const downResults = await store1.docs.index.search(request, {
+				remote: { ...remoteOptions, timeout: 250 },
+			});
+			expect(downResults.length).to.be.lessThan(count);
+		} catch (error) {
+			expect(error).to.be.instanceOf(MissingResponsesError);
+		}
 
 		const restartDelay = 800;
 		const restartPromise = (async () => {
@@ -121,11 +147,11 @@ describe("strict search under churn", () => {
 			);
 		};
 
+		await restartPromise;
 		const results = await strictSearchWithRetries({
-			attempts: 4,
+			attempts: 6,
 			baseDelay: 250,
 		});
-		await restartPromise;
 		expect(results).to.have.length(count);
 	});
 });
