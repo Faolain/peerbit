@@ -2174,9 +2174,12 @@ function addEventToSidebar(evt) {
     snapshot.appendChild(noData);
   }
 
+  // Stop clicks inside snapshot from collapsing the row
+  snapshot.addEventListener('click', (e) => { e.stopPropagation(); });
+
   row.appendChild(snapshot);
 
-  // Click to toggle expand
+  // Click to toggle expand (only fires from summary, not snapshot)
   row.addEventListener('click', () => {
     row.classList.toggle('expanded');
   });
