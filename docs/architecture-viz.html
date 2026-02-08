@@ -1089,6 +1089,13 @@ const engine = {
 
   restoreToEvent(index) {
     if (index < 0 || index >= this.stateHistory.length) return;
+
+    // Preserve current settled positions so nodes don't jump
+    const savedPositions = new Map();
+    for (const [nid, node] of this.nodes) {
+      savedPositions.set(nid, { x: node.position.x, y: node.position.y });
+    }
+
     const snap = JSON.parse(this.stateHistory[index], mapReviver);
 
     // Restore core state
@@ -1098,6 +1105,15 @@ const engine = {
     nextConnId = snap.counters.nextConnId;
     nextProgramId = snap.counters.nextProgramId;
     nextEntryId = snap.counters.nextEntryId;
+
+    // Re-apply settled positions to nodes that still exist
+    for (const [nid, node] of this.nodes) {
+      const saved = savedPositions.get(nid);
+      if (saved) {
+        node.position.x = saved.x;
+        node.position.y = saved.y;
+      }
+    }
 
     // Clear transient state (closures reference stale objects)
     this.particles = [];
