@@ -280,6 +280,15 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
 .event-row .snapshot-node-label {
   font-weight: 600; font-size: 11px; margin-bottom: 2px; padding: 2px 0;
 }
+.diff-old { color: var(--red); text-decoration: line-through; font-size: 10px; }
+.diff-arrow { color: var(--text-dim); margin: 0 3px; font-size: 10px; }
+.diff-new { color: var(--green); }
+.diff-added .tree-key { color: var(--green); }
+.diff-added .tree-value, .diff-added .tree-type { color: var(--green); }
+.diff-removed .tree-key { color: var(--red); text-decoration: line-through; }
+.diff-removed .tree-value, .diff-removed .tree-type { color: var(--red); text-decoration: line-through; }
+.diff-changed > .tree-row { background: rgba(227,179,65,0.08); }
+.diff-no-changes { color: var(--text-dim); font-style: italic; padding: 4px 12px; font-size: 11px; }
 .sidebar-hidden #event-sidebar { display: none; }
 .sidebar-hidden #canvas-container, .sidebar-hidden #timeline-panel { left: 0 !important; }
 </style>
@@ -1015,13 +1024,22 @@ const engine = {
     }
   },
 
+  previousSnapshots: new Map(), // nodeId → last known state for diffing
+
   pushEvent(evt) {
-    // Capture state snapshots for affected nodes
+    // Capture state snapshots and diffs for affected nodes
     const affectedIds = getAffectedNodeIds(evt.details);
     evt.nodeSnapshots = {};
+    evt.nodeDiffs = {};
     for (const nid of affectedIds) {
       const node = this.nodes.get(nid);
-      if (node) evt.nodeSnapshots[nid] = buildNodeStateTree(node);
+      if (node) {
+        const current = buildNodeStateTree(node);
+        const previous = this.previousSnapshots.get(nid);
+        evt.nodeSnapshots[nid] = current;
+        evt.nodeDiffs[nid] = previous ? diffState(previous, current) : null;
+        this.previousSnapshots.set(nid, current);
+      }
     }
 
     this.eventLog.push(evt);
@@ -1112,6 +1130,7 @@ const engine = {
     this.pendingEvents = [];
     this.particles = [];
     this.checkpoints = [];
+    this.previousSnapshots.clear();
     for (const [id] of this.inspectors) this.closeInspector(id);
     this.inspectors.clear();
     nextNodeId = 0; nextConnId = 0; nextProgramId = 0; nextEntryId = 0;
@@ -1927,6 +1946,140 @@ function getAffectedNodeIds(details) {
   return [...ids];
 }
 
+// Recursive state diff: returns a diff tree describing changes
+// Each node is { type: 'unchanged'|'added'|'removed'|'changed'|'object', ... }
+function diffState(oldObj, newObj) {
+  if (oldObj === newObj) return { type: 'unchanged', value: newObj };
+  if (oldObj === null || oldObj === undefined || newObj === null || newObj === undefined) {
+    if (oldObj == null && newObj == null) return { type: 'unchanged', value: newObj };
+    if (oldObj == null) return { type: 'added', value: newObj };
+    if (newObj == null) return { type: 'removed', value: oldObj };
+  }
+  if (typeof oldObj !== typeof newObj) {
+    return { type: 'changed', oldValue: oldObj, newValue: newObj };
+  }
+  if (typeof oldObj !== 'object') {
+    return oldObj === newObj
+      ? { type: 'unchanged', value: newObj }
+      : { type: 'changed', oldValue: oldObj, newValue: newObj };
+  }
+  // Both are objects/arrays
+  const oldIsArray = Array.isArray(oldObj);
+  const newIsArray = Array.isArray(newObj);
+  if (oldIsArray !== newIsArray) {
+    return { type: 'changed', oldValue: oldObj, newValue: newObj };
+  }
+  if (oldIsArray) {
+    // Array diff by index
+    const children = [];
+    const maxLen = Math.max(oldObj.length, newObj.length);
+    let hasChanges = false;
+    for (let i = 0; i < maxLen; i++) {
+      if (i >= oldObj.length) {
+        children.push({ key: i, diff: { type: 'added', value: newObj[i] } });
+        hasChanges = true;
+      } else if (i >= newObj.length) {
+        children.push({ key: i, diff: { type: 'removed', value: oldObj[i] } });
+        hasChanges = true;
+      } else {
+        const child = diffState(oldObj[i], newObj[i]);
+        children.push({ key: i, diff: child });
+        if (child.type !== 'unchanged') hasChanges = true;
+      }
+    }
+    return { type: hasChanges ? 'array' : 'unchanged', value: newObj, children, hasChanges };
+  }
+  // Object diff
+  const allKeys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
+  const children = [];
+  let hasChanges = false;
+  for (const key of allKeys) {
+    if (!(key in oldObj)) {
+      children.push({ key, diff: { type: 'added', value: newObj[key] } });
+      hasChanges = true;
+    } else if (!(key in newObj)) {
+      children.push({ key, diff: { type: 'removed', value: oldObj[key] } });
+      hasChanges = true;
+    } else {
+      const child = diffState(oldObj[key], newObj[key]);
+      children.push({ key, diff: child });
+      if (child.type !== 'unchanged') hasChanges = true;
+    }
+  }
+  return { type: hasChanges ? 'object' : 'unchanged', value: newObj, children, hasChanges };
+}
+
+// Render a diff tree node, only showing paths with changes
+function renderDiffTree(key, diff, depth) {
+  if (depth === undefined) depth = 0;
+  const container = document.createElement('div');
+  container.className = 'tree-node';
+
+  if (diff.type === 'unchanged') {
+    // Skip unchanged subtrees entirely for compact view
+    return null;
+  }
+
+  if (diff.type === 'added') {
+    container.classList.add('diff-added');
+    container.appendChild(renderTreeNode(key, diff.value, depth < 2, depth));
+    return container;
+  }
+
+  if (diff.type === 'removed') {
+    container.classList.add('diff-removed');
+    container.appendChild(renderTreeNode(key, diff.value, false, depth));
+    return container;
+  }
+
+  if (diff.type === 'changed') {
+    // Leaf-level change: show old → new
+    const row = document.createElement('div');
+    row.className = 'tree-row';
+    container.classList.add('diff-changed');
+    const formatVal = (v) => typeof v === 'string' ? `"${v}"` : String(v);
+    const typeClass = (v) => typeof v === 'string' ? 'string' : typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : '';
+    row.innerHTML = `<span class="tree-toggle"></span>${key !== '' ? `<span class="tree-key">${escapeHtml(String(key))}</span><span class="tree-colon">:</span>` : ''}<span class="diff-old">${escapeHtml(formatVal(diff.oldValue))}</span><span class="diff-arrow">&rarr;</span><span class="diff-new tree-value ${typeClass(diff.newValue)}">${escapeHtml(formatVal(diff.newValue))}</span>`;
+    container.appendChild(row);
+    return container;
+  }
+
+  // Object or array with some changes — show only changed children
+  if (diff.type === 'object' || diff.type === 'array') {
+    const isArray = diff.type === 'array';
+    const changedChildren = diff.children.filter(c => c.diff.type !== 'unchanged');
+    const label = isArray ? `Array(${diff.children.length})` : `{${diff.children.length}}`;
+    const changedLabel = `${changedChildren.length} changed`;
+
+    const row = document.createElement('div');
+    row.className = 'tree-row';
+    const expanded = depth < 1;
+    row.innerHTML = `<span class="tree-toggle">${expanded ? '▼' : '▶'}</span>${key !== '' ? `<span class="tree-key">${escapeHtml(String(key))}</span><span class="tree-colon">:</span>` : ''}<span class="tree-type">${label}</span> <span class="diff-arrow" style="font-size:10px;color:var(--yellow)">${changedLabel}</span>`;
+
+    const childrenEl = document.createElement('div');
+    childrenEl.className = 'tree-children';
+    childrenEl.style.display = expanded ? 'block' : 'none';
+
+    for (const child of changedChildren) {
+      const childEl = renderDiffTree(String(child.key), child.diff, depth + 1);
+      if (childEl) childrenEl.appendChild(childEl);
+    }
+
+    row.querySelector('.tree-toggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = childrenEl.style.display !== 'none';
+      childrenEl.style.display = isOpen ? 'none' : 'block';
+      row.querySelector('.tree-toggle').textContent = isOpen ? '▶' : '▼';
+    });
+
+    container.appendChild(row);
+    container.appendChild(childrenEl);
+    return container;
+  }
+
+  return null;
+}
+
 let sidebarUserScrolledUp = false;
 
 (function initSidebarScroll() {
@@ -1986,7 +2139,28 @@ function addEventToSidebar(evt) {
       label.style.color = node ? node.color : 'var(--text)';
       label.textContent = node ? node.displayName : 'Node ' + nid;
       snapshot.appendChild(label);
-      snapshot.appendChild(renderTreeNode('', state, true));
+
+      const diff = evt.nodeDiffs && evt.nodeDiffs[nid];
+      if (diff && diff.hasChanges) {
+        // Render only the changed fields as a diff tree
+        const diffEl = renderDiffTree('', diff, 0);
+        if (diffEl) {
+          snapshot.appendChild(diffEl);
+        } else {
+          const noChange = document.createElement('div');
+          noChange.className = 'diff-no-changes';
+          noChange.textContent = 'No state changes';
+          snapshot.appendChild(noChange);
+        }
+      } else if (!diff) {
+        // First event for this node — show full state
+        snapshot.appendChild(renderTreeNode('', state, true));
+      } else {
+        const noChange = document.createElement('div');
+        noChange.className = 'diff-no-changes';
+        noChange.textContent = 'No state changes';
+        snapshot.appendChild(noChange);
+      }
     }
   } else {
     const noData = document.createElement('div');
