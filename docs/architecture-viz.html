@@ -296,7 +296,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
 .diff-no-changes { color: var(--text-dim); font-style: italic; padding: 4px 12px; font-size: 11px; }
 .sidebar-hidden #event-sidebar { display: none; }
 .sidebar-hidden #canvas-container, .sidebar-hidden #timeline-panel { left: 0 !important; }
-.event-row.active { border-left: 3px solid var(--accent); background: rgba(74,158,255,0.06); }
+.event-row.active { border-left: 3px solid var(--orange); background: rgba(255,136,68,0.12); }
+.event-row.active .event-type-label { color: var(--orange); }
+.event-row.active .event-desc { color: var(--text-bright); }
 </style>
 </head>
 <body>
@@ -1398,13 +1400,17 @@ const renderer = {
     const node = this.hitTestNode(sx, sy);
     if (node) {
       this.dragging = node;
+      this.dragStartScreen = { x: sx, y: sy };
+      this.didDrag = false;
       this.dragOffset = {
         x: node.position.x - this.screenToWorld(sx, sy).x,
         y: node.position.y - this.screenToWorld(sx, sy).y,
       };
     } else {
       this.panning = true;
+      this.didPan = false;
       this.panStart = { x: e.clientX - this.transform.x, y: e.clientY - this.transform.y };
+      this.panClickPos = { x: e.clientX, y: e.clientY };
     }
   },
 
@@ -1414,6 +1420,9 @@ const renderer = {
     const sy = e.clientY - rect.top;
 
     if (this.dragging) {
+      const dx = sx - this.dragStartScreen.x;
+      const dy = sy - this.dragStartScreen.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this.didDrag = true;
       const { x, y } = this.screenToWorld(sx, sy);
       this.dragging.position.x = x + this.dragOffset.x;
       this.dragging.position.y = y + this.dragOffset.y;
@@ -1425,6 +1434,9 @@ const renderer = {
         simNode.fy = this.dragging.position.y;
       }
     } else if (this.panning) {
+      const dx = e.clientX - this.panClickPos.x;
+      const dy = e.clientY - this.panClickPos.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this.didPan = true;
       this.transform.x = e.clientX - this.panStart.x;
       this.transform.y = e.clientY - this.panStart.y;
     } else {
@@ -1436,10 +1448,28 @@ const renderer = {
 
   onMouseUp(e) {
     if (this.dragging) {
+      const node = this.dragging;
       // Release fixed position
-      const simNode = this.simulation.nodes().find(n => n.id === this.dragging.id);
+      const simNode = this.simulation.nodes().find(n => n.id === node.id);
       if (simNode) { simNode.fx = null; simNode.fy = null; }
       this.dragging = null;
+      // Short click (no drag) → show context menu
+      if (!this.didDrag) {
+        showNodeContextMenu(e.clientX, e.clientY, node);
+        this._justShowedMenu = true;
+      }
+    }
+    if (this.panning && !this.didPan) {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const conn = this.hitTestConnection(sx, sy);
+      if (conn) {
+        showConnectionContextMenu(e.clientX, e.clientY, conn);
+      } else {
+        showCanvasContextMenu(e.clientX, e.clientY, this.screenToWorld(sx, sy));
+      }
+      this._justShowedMenu = true;
     }
     this.panning = false;
   },
@@ -2355,14 +2385,18 @@ const timeline = {
     this.updateDisplay();
     engine.restoreToEvent(this.currentIndex);
 
-    // Highlight current event row in sidebar
+    // Highlight and expand current event row in sidebar
     const list = document.getElementById('event-list');
     if (list) {
       const prev = list.querySelector('.event-row.active');
-      if (prev) prev.classList.remove('active');
+      if (prev) {
+        prev.classList.remove('active');
+        prev.classList.remove('expanded');
+      }
       const rows = list.children;
       if (rows[this.currentIndex]) {
         rows[this.currentIndex].classList.add('active');
+        rows[this.currentIndex].classList.add('expanded');
         rows[this.currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     }
@@ -2650,6 +2684,10 @@ document.addEventListener('keydown', (e) => {
 
 // Close context menu on click outside
 document.addEventListener('click', (e) => {
+  if (renderer._justShowedMenu) {
+    renderer._justShowedMenu = false;
+    return;
+  }
   if (!e.target.closest('#context-menu') && !e.target.closest('#connect-submenu')) {
     hideContextMenu();
   }
