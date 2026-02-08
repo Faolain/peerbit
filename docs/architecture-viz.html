@@ -1772,12 +1772,32 @@ const renderer = {
     const toNode = engine.nodes.get(p.toNodeId);
     if (!fromNode || !toNode) return;
 
-    const x = fromNode.position.x + (toNode.position.x - fromNode.position.x) * p.progress;
-    const y = fromNode.position.y + (toNode.position.y - fromNode.position.y) * p.progress;
+    const fx = fromNode.position.x, fy = fromNode.position.y;
+    const tx = toNode.position.x, ty = toNode.position.y;
+    const x = fx + (tx - fx) * p.progress;
+    const y = fy + (ty - fy) * p.progress;
+
+    // Comet trail — gradient line from a trailing point to the head
+    const tailLen = 0.08; // fraction of the path
+    const tp = Math.max(0, p.progress - tailLen);
+    const tailX = fx + (tx - fx) * tp;
+    const tailY = fy + (ty - fy) * tp;
 
     ctx.save();
+    const grad = ctx.createLinearGradient(tailX, tailY, x, y);
+    grad.addColorStop(0, 'transparent');
+    grad.addColorStop(1, p.color);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = p.size * 1.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+
+    // Glowing head
     ctx.shadowColor = p.color;
-    ctx.shadowBlur = 6;
+    ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.arc(x, y, p.size, 0, Math.PI * 2);
     ctx.fillStyle = p.color;
