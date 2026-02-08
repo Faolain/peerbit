@@ -226,6 +226,28 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
   cursor: pointer; font-size: 18px;
 }
 
+/* Import modal */
+#import-modal {
+  display: none; position: absolute; inset: 0; z-index: 600;
+  background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+}
+#import-modal.visible { display: flex; }
+#import-modal-content {
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 24px; width: 480px; max-width: 90%;
+}
+#import-modal-content h3 { color: var(--text-bright); margin-bottom: 8px; font-size: 14px; }
+#import-modal-content p { color: var(--text-dim); margin-bottom: 16px; font-size: 12px; }
+#import-file-name { color: var(--text-dim); font-size: 11px; margin-left: 8px; }
+#import-textarea {
+  display: block; width: 100%; height: 140px; margin: 12px 0 16px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-family: var(--font); font-size: 11px; padding: 8px;
+  resize: vertical;
+}
+#import-textarea:focus { outline: none; border-color: var(--accent); }
+#import-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* Connection mode indicator */
 #connection-mode-indicator {
   display: none; position: absolute; top: 56px; left: 50%;
@@ -335,6 +357,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
     <option value="dynamic-sharding">Dynamic Sharding</option>
     <option value="entry-lifecycle">Entry Lifecycle</option>
   </select>
+  <div class="separator"></div>
+  <button class="action-btn" id="clear-btn" title="Clear canvas">Clear</button>
+  <button class="action-btn" id="export-btn" title="Export state as JSON">Export</button>
+  <button class="action-btn" id="import-btn" title="Import state from JSON">Import</button>
+  <input type="file" id="import-file-input" accept=".json" style="display:none">
   <div style="flex:1"></div>
   <button class="action-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Event Log (E)">Event Log</button>
   <button class="action-btn" onclick="showHelp()" title="Help (?)">? Help</button>
@@ -421,6 +448,21 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
     <h3>Peerbit Data Flow</h3>
     <p>When peers connect: Transport → PubSub ready → Blocks ready → Exchange heads → Replicate entries.</p>
     <p>SharedLog entries are assigned coordinates in a circular 0..1 space. Each peer's replication range determines which entries it stores.</p>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div id="import-modal">
+  <div id="import-modal-content">
+    <h3>Import State</h3>
+    <p>Upload a JSON file or paste exported JSON below.</p>
+    <button class="action-btn" id="import-file-btn">Choose File...</button>
+    <span id="import-file-name"></span>
+    <textarea id="import-textarea" placeholder="Or paste JSON here..."></textarea>
+    <div id="import-modal-actions">
+      <button class="action-btn" id="import-cancel-btn">Cancel</button>
+      <button class="action-btn primary" id="import-load-btn">Load</button>
+    </div>
   </div>
 </div>
 
@@ -2423,6 +2465,9 @@ const timeline = {
     document.getElementById('play-btn').textContent = this.playing ? '⏸' : '▶';
     document.getElementById('play-btn').classList.toggle('active', this.playing);
     if (this.playing) {
+      if (this.currentIndex >= engine.eventLog.length - 1) {
+        this.seekTo(0);
+      }
       this.playInterval = setInterval(() => {
         if (this.currentIndex < engine.eventLog.length - 1) {
           this.seekTo(this.currentIndex + 1);
@@ -2490,6 +2535,57 @@ document.getElementById('play-btn').addEventListener('click', () => timeline.tog
 document.getElementById('step-fwd-btn').addEventListener('click', () => timeline.stepForward());
 document.getElementById('skip-end-btn').addEventListener('click', () => timeline.skipToEnd());
 document.getElementById('speed-btn').addEventListener('click', () => timeline.cycleSpeed());
+
+// Clear / Export / Import buttons
+document.getElementById('clear-btn').addEventListener('click', () => {
+  if (engine.eventLog.length > 0 && !confirm('Clear the canvas? This will remove all nodes, connections, and event history.')) return;
+  engine.reset();
+  showToast('Canvas cleared', 'var(--orange)');
+});
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (engine.eventLog.length === 0) {
+    showToast('Nothing to export', 'var(--red)');
+    return;
+  }
+  exportState();
+});
+document.getElementById('import-btn').addEventListener('click', showImportModal);
+document.getElementById('import-file-btn').addEventListener('click', () => {
+  document.getElementById('import-file-input').click();
+});
+document.getElementById('import-file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('import-file-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      importState(data);
+      hideImportModal();
+      showToast('State imported from file', 'var(--green)');
+    } catch (err) {
+      showToast('Import failed: ' + err.message, 'var(--red)');
+    }
+  };
+  reader.readAsText(file);
+});
+document.getElementById('import-load-btn').addEventListener('click', () => {
+  const text = document.getElementById('import-textarea').value.trim();
+  if (!text) {
+    showToast('Paste JSON or choose a file first', 'var(--red)');
+    return;
+  }
+  try {
+    const data = JSON.parse(text);
+    importState(data);
+    hideImportModal();
+    showToast('State imported from JSON', 'var(--green)');
+  } catch (err) {
+    showToast('Import failed: ' + err.message, 'var(--red)');
+  }
+});
+document.getElementById('import-cancel-btn').addEventListener('click', hideImportModal);
 
 /* ============================================================
    TOASTS
@@ -2728,50 +2824,58 @@ function saveToLocalStorage() {
   }
 }
 
+function importState(data) {
+  if (!data.eventLog || !data.stateHistory || data.eventLog.length === 0) {
+    throw new Error('Invalid state data');
+  }
+
+  engine.reset();
+
+  // Restore the final state snapshot to get nodes/connections/counters
+  const lastSnap = JSON.parse(data.stateHistory[data.stateHistory.length - 1], mapReviver);
+  engine.nodes = new Map(lastSnap.nodesData);
+  engine.connections = new Map(lastSnap.connectionsData);
+  nextNodeId = lastSnap.counters.nextNodeId;
+  nextConnId = lastSnap.counters.nextConnId;
+  nextProgramId = lastSnap.counters.nextProgramId;
+  nextEntryId = lastSnap.counters.nextEntryId;
+
+  engine.eventLog = data.eventLog;
+  engine.stateHistory = data.stateHistory;
+
+  // Rebuild previousSnapshots from current nodes
+  engine.previousSnapshots.clear();
+  for (const [nid, node] of engine.nodes) {
+    engine.previousSnapshots.set(nid, buildNodeStateTree(node));
+  }
+
+  // Rebuild sidebar
+  document.getElementById('event-list').innerHTML = '';
+  for (const evt of engine.eventLog) {
+    addEventToSidebar(evt);
+  }
+
+  // Set up timeline
+  const slider = document.getElementById('timeline-slider');
+  slider.max = engine.eventLog.length - 1;
+  const idx = Math.min(data.currentIndex || engine.eventLog.length - 1, engine.eventLog.length - 1);
+  timeline.currentIndex = idx;
+  slider.value = idx;
+  timeline.updateDisplay();
+  timeline.rebuildEventMarkers();
+
+  // Restore to the saved timeline position
+  engine.restoreToEvent(idx);
+
+  renderer.updateForceLayout();
+}
+
 function loadFromLocalStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
-    if (!data.eventLog || !data.stateHistory || data.eventLog.length === 0) return false;
-
-    // Restore the final state snapshot to get nodes/connections/counters
-    const lastSnap = JSON.parse(data.stateHistory[data.stateHistory.length - 1], mapReviver);
-    engine.nodes = new Map(lastSnap.nodesData);
-    engine.connections = new Map(lastSnap.connectionsData);
-    nextNodeId = lastSnap.counters.nextNodeId;
-    nextConnId = lastSnap.counters.nextConnId;
-    nextProgramId = lastSnap.counters.nextProgramId;
-    nextEntryId = lastSnap.counters.nextEntryId;
-
-    engine.eventLog = data.eventLog;
-    engine.stateHistory = data.stateHistory;
-
-    // Rebuild previousSnapshots from current nodes
-    engine.previousSnapshots.clear();
-    for (const [nid, node] of engine.nodes) {
-      engine.previousSnapshots.set(nid, buildNodeStateTree(node));
-    }
-
-    // Rebuild sidebar
-    document.getElementById('event-list').innerHTML = '';
-    for (const evt of engine.eventLog) {
-      addEventToSidebar(evt);
-    }
-
-    // Set up timeline
-    const slider = document.getElementById('timeline-slider');
-    slider.max = engine.eventLog.length - 1;
-    const idx = Math.min(data.currentIndex || engine.eventLog.length - 1, engine.eventLog.length - 1);
-    timeline.currentIndex = idx;
-    slider.value = idx;
-    timeline.updateDisplay();
-    timeline.rebuildEventMarkers();
-
-    // Restore to the saved timeline position
-    engine.restoreToEvent(idx);
-
-    renderer.updateForceLayout();
+    importState(data);
     showToast('Restored previous session', '#4a9eff');
     return true;
   } catch (e) {
@@ -2779,6 +2883,35 @@ function loadFromLocalStorage() {
     localStorage.removeItem(STORAGE_KEY);
     return false;
   }
+}
+
+function exportState() {
+  const data = JSON.stringify({
+    eventLog: engine.eventLog,
+    stateHistory: engine.stateHistory,
+    currentIndex: timeline.currentIndex,
+  });
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'peerbit-viz-export.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('State exported', 'var(--green)');
+}
+
+function showImportModal() {
+  document.getElementById('import-textarea').value = '';
+  document.getElementById('import-file-name').textContent = '';
+  document.getElementById('import-file-input').value = '';
+  document.getElementById('import-modal').classList.add('visible');
+}
+
+function hideImportModal() {
+  document.getElementById('import-modal').classList.remove('visible');
 }
 
 function clearSavedState() {
