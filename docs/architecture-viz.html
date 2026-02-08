@@ -100,7 +100,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
   -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
   background: var(--accent); cursor: pointer; border: 2px solid var(--bg-panel);
 }
-#event-markers { position: absolute; top: 0; left: 0; right: 0; height: 8px; pointer-events: none; }
+#event-markers { position: absolute; top: 0; left: 7px; right: 7px; height: 8px; pointer-events: none; }
 
 /* Event description */
 #event-description {
@@ -296,6 +296,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
 .diff-no-changes { color: var(--text-dim); font-style: italic; padding: 4px 12px; font-size: 11px; }
 .sidebar-hidden #event-sidebar { display: none; }
 .sidebar-hidden #canvas-container, .sidebar-hidden #timeline-panel { left: 0 !important; }
+.event-row.active { border-left: 3px solid var(--accent); background: rgba(74,158,255,0.06); }
 </style>
 </head>
 <body>
@@ -596,6 +597,7 @@ const engine = {
   // State snapshots for timeline scrubbing
   checkpoints: [],
   checkpointInterval: 50,
+  stateHistory: [], // stateHistory[i] = JSON string of full state after event i
 
   addNode(overrides = {}) {
     const cx = canvas.width / (2 * devicePixelRatio);
@@ -1032,6 +1034,9 @@ const engine = {
   previousSnapshots: new Map(), // nodeId → last known state for diffing
 
   pushEvent(evt) {
+    // Truncate future if we've seeked backward and are now acting
+    this.truncateToCurrentTimeline();
+
     // Capture state snapshots and diffs for affected nodes
     const affectedIds = getAffectedNodeIds(evt.details);
     evt.nodeSnapshots = {};
@@ -1056,6 +1061,62 @@ const engine = {
     if (this.eventLog.length % this.checkpointInterval === 0) {
       this.saveCheckpoint();
     }
+
+    // Capture full state snapshot for timeline scrubbing
+    this.stateHistory.push(JSON.stringify({
+      nodesData: [...this.nodes.entries()],
+      connectionsData: [...this.connections.entries()],
+      counters: { nextNodeId, nextConnId, nextProgramId, nextEntryId },
+    }, mapReplacer));
+  },
+
+  truncateToCurrentTimeline() {
+    const keep = timeline.currentIndex + 1;
+    if (this.eventLog.length > keep) {
+      this.eventLog.length = keep;
+      this.stateHistory.length = keep;
+      // Truncate sidebar DOM children
+      const list = document.getElementById('event-list');
+      while (list && list.children.length > keep) {
+        list.removeChild(list.lastChild);
+      }
+      // Rebuild event markers with correct positions
+      timeline.rebuildEventMarkers();
+    }
+  },
+
+  restoreToEvent(index) {
+    if (index < 0 || index >= this.stateHistory.length) return;
+    const snap = JSON.parse(this.stateHistory[index], mapReviver);
+
+    // Restore core state
+    this.nodes = new Map(snap.nodesData);
+    this.connections = new Map(snap.connectionsData);
+    nextNodeId = snap.counters.nextNodeId;
+    nextConnId = snap.counters.nextConnId;
+    nextProgramId = snap.counters.nextProgramId;
+    nextEntryId = snap.counters.nextEntryId;
+
+    // Clear transient state (closures reference stale objects)
+    this.particles = [];
+    this.pendingEvents = [];
+
+    // Rebuild previousSnapshots from restored nodes for correct future diffs
+    this.previousSnapshots.clear();
+    for (const [nid, node] of this.nodes) {
+      this.previousSnapshots.set(nid, buildNodeStateTree(node));
+    }
+
+    // Close inspectors for nodes that no longer exist, update remaining
+    for (const [nid] of this.inspectors) {
+      if (!this.nodes.has(nid)) {
+        this.closeInspector(nid);
+      } else {
+        this.updateInspector(nid);
+      }
+    }
+
+    renderer.syncForceLayoutQuiet();
   },
 
   saveCheckpoint() {
@@ -1135,6 +1196,7 @@ const engine = {
     this.pendingEvents = [];
     this.particles = [];
     this.checkpoints = [];
+    this.stateHistory = [];
     this.previousSnapshots.clear();
     for (const [id] of this.inspectors) this.closeInspector(id);
     this.inspectors.clear();
@@ -1149,6 +1211,14 @@ const engine = {
 function mapReplacer(key, value) {
   if (value instanceof Map) return { __type: 'Map', entries: [...value.entries()] };
   if (value instanceof Set) return { __type: 'Set', values: [...value.values()] };
+  return value;
+}
+
+function mapReviver(key, value) {
+  if (value && typeof value === 'object') {
+    if (value.__type === 'Map') return new Map(value.entries);
+    if (value.__type === 'Set') return new Set(value.values);
+  }
   return value;
 }
 
@@ -1230,6 +1300,25 @@ const renderer = {
 
     // Auto-stop after settling
     setTimeout(() => this.simulation.stop(), 3000);
+  },
+
+  syncForceLayoutQuiet() {
+    const nodes = [...engine.nodes.values()].map(n => ({
+      id: n.id,
+      x: n.position.x,
+      y: n.position.y,
+      fx: n.position.x,
+      fy: n.position.y,
+    }));
+
+    const links = [...engine.connections.values()].map(c => ({
+      source: c.fromNodeId,
+      target: c.toNodeId,
+    }));
+
+    this.simulation.nodes(nodes);
+    this.simulation.force('link').links(links);
+    this.simulation.stop();
   },
 
   syncPositions() {
@@ -2219,7 +2308,7 @@ const timeline = {
     slider.value = engine.eventLog.length - 1;
     this.currentIndex = engine.eventLog.length - 1;
     this.updateDisplay();
-    this.addEventMarker(evt);
+    this.rebuildEventMarkers();
   },
 
   updateDisplay() {
@@ -2234,19 +2323,48 @@ const timeline = {
 
   addEventMarker(evt) {
     const markers = document.getElementById('event-markers');
-    const total = Math.max(1, engine.eventLog.length);
+    // Use length-1 to match slider scale (max = length-1)
+    const max = Math.max(1, engine.eventLog.length - 1);
+    const index = markers.children.length;
     const marker = document.createElement('div');
-    marker.style.cssText = `position:absolute;width:3px;height:8px;border-radius:1px;background:${evt.color};left:${(evt.id / total * 100)}%;`;
+    marker.style.cssText = `position:absolute;width:3px;height:8px;border-radius:1px;background:${evt.color};left:${(index / max * 100)}%;`;
     markers.appendChild(marker);
 
     // Limit markers
     while (markers.children.length > 200) markers.removeChild(markers.firstChild);
   },
 
+  rebuildEventMarkers() {
+    const markers = document.getElementById('event-markers');
+    if (!markers) return;
+    markers.innerHTML = '';
+    // Use length-1 to match slider scale (max = length-1)
+    const max = Math.max(1, engine.eventLog.length - 1);
+    for (let i = 0; i < engine.eventLog.length; i++) {
+      const e = engine.eventLog[i];
+      const marker = document.createElement('div');
+      marker.style.cssText = `position:absolute;width:3px;height:8px;border-radius:1px;background:${e.color};left:${(i / max * 100)}%;`;
+      markers.appendChild(marker);
+    }
+  },
+
   seekTo(index) {
     this.currentIndex = Math.max(0, Math.min(engine.eventLog.length - 1, index));
     document.getElementById('timeline-slider').value = this.currentIndex;
     this.updateDisplay();
+    engine.restoreToEvent(this.currentIndex);
+
+    // Highlight current event row in sidebar
+    const list = document.getElementById('event-list');
+    if (list) {
+      const prev = list.querySelector('.event-row.active');
+      if (prev) prev.classList.remove('active');
+      const rows = list.children;
+      if (rows[this.currentIndex]) {
+        rows[this.currentIndex].classList.add('active');
+        rows[this.currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
   },
 
   togglePlay() {
@@ -2256,9 +2374,7 @@ const timeline = {
     if (this.playing) {
       this.playInterval = setInterval(() => {
         if (this.currentIndex < engine.eventLog.length - 1) {
-          this.currentIndex++;
-          document.getElementById('timeline-slider').value = this.currentIndex;
-          this.updateDisplay();
+          this.seekTo(this.currentIndex + 1);
         } else {
           this.togglePlay();
         }
@@ -2291,9 +2407,7 @@ const timeline = {
       clearInterval(this.playInterval);
       this.playInterval = setInterval(() => {
         if (this.currentIndex < engine.eventLog.length - 1) {
-          this.currentIndex++;
-          document.getElementById('timeline-slider').value = this.currentIndex;
-          this.updateDisplay();
+          this.seekTo(this.currentIndex + 1);
         } else {
           this.togglePlay();
         }
