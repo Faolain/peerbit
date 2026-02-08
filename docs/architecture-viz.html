@@ -1,0 +1,2356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peerbit Architecture Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+/* ============================================================
+   CSS: Dark theme, layout, panels
+   ============================================================ */
+:root {
+  --bg: #0d1117;
+  --bg-panel: #161b22;
+  --bg-panel-hover: #1c2333;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --text-dim: #8b949e;
+  --text-bright: #f0f6fc;
+  --accent: #4a9eff;
+  --green: #00cc88;
+  --orange: #ff8844;
+  --red: #f85149;
+  --purple: #bc8cff;
+  --yellow: #e3b341;
+  --pink: #f778ba;
+  --font: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 12px; }
+
+/* Action Bar */
+#action-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 100;
+  background: var(--bg-panel); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 12px; gap: 8px;
+}
+#action-bar .title {
+  font-size: 14px; font-weight: 600; color: var(--text-bright); margin-right: 16px;
+  white-space: nowrap;
+}
+.action-btn {
+  padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); cursor: pointer; font-family: var(--font);
+  font-size: 11px; white-space: nowrap; transition: all 0.15s;
+}
+.action-btn:hover { background: var(--bg-panel-hover); border-color: var(--accent); color: var(--text-bright); }
+.action-btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+.action-btn.primary:hover { background: #388bfd; }
+.separator { width: 1px; height: 24px; background: var(--border); }
+
+/* Layer toggles */
+.layer-toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.layer-toggle:hover { background: var(--bg-panel-hover); }
+.layer-dot { width: 8px; height: 8px; border-radius: 50%; }
+.layer-toggle.off .layer-dot { opacity: 0.3; }
+.layer-toggle.off { color: var(--text-dim); }
+
+/* Scenario dropdown */
+#scenario-select {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: var(--font); font-size: 11px;
+  cursor: pointer;
+}
+
+/* Canvas */
+#canvas-container {
+  position: absolute; top: 44px; left: 280px; right: 0; bottom: 100px;
+}
+#main-canvas { width: 100%; height: 100%; display: block; }
+
+/* Timeline */
+#timeline-panel {
+  position: absolute; bottom: 0; left: 280px; right: 0; height: 100px; z-index: 100;
+  background: var(--bg-panel); border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; padding: 8px 16px;
+}
+#timeline-controls {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.timeline-btn {
+  width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--text); cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; font-family: var(--font);
+}
+.timeline-btn:hover { background: var(--bg-panel-hover); border-color: var(--accent); }
+.timeline-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+#speed-display { color: var(--text-dim); font-size: 11px; min-width: 32px; text-align: center; }
+#event-counter { color: var(--text-dim); font-size: 11px; margin-left: auto; }
+
+/* Timeline slider */
+#timeline-slider-container {
+  position: relative; height: 24px; margin-bottom: 4px;
+}
+#timeline-slider {
+  width: 100%; -webkit-appearance: none; appearance: none; height: 4px;
+  background: var(--border); border-radius: 2px; outline: none; margin-top: 10px;
+}
+#timeline-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid var(--bg-panel);
+}
+#event-markers { position: absolute; top: 0; left: 0; right: 0; height: 8px; pointer-events: none; }
+
+/* Event description */
+#event-description {
+  font-size: 11px; color: var(--text-dim); height: 16px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+#event-description .event-type { color: var(--accent); }
+
+/* Context Menu */
+#context-menu {
+  display: none; position: absolute; z-index: 200;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px 0; min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+#context-menu .menu-item {
+  padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  font-size: 12px;
+}
+#context-menu .menu-item:hover { background: var(--bg-panel-hover); }
+#context-menu .menu-item .icon { width: 16px; text-align: center; }
+#context-menu .menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+#context-menu .menu-header { padding: 4px 12px; color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+#context-menu .submenu { position: relative; }
+#context-menu .submenu-items {
+  display: none; position: absolute; left: 100%; top: -4px;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px 0; min-width: 160px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+#context-menu .submenu:hover .submenu-items { display: block; }
+
+/* Sub-menu for connecting to nodes */
+#connect-submenu {
+  display: none; position: absolute; z-index: 201;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px 0; min-width: 160px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+#connect-submenu .menu-item { padding: 6px 12px; cursor: pointer; font-size: 12px; }
+#connect-submenu .menu-item:hover { background: var(--bg-panel-hover); }
+
+/* Inspector Panels */
+.inspector-panel {
+  position: absolute; z-index: 150;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+  min-width: 280px; max-width: 400px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  font-size: 11px; overflow: hidden;
+}
+.inspector-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  cursor: move; user-select: none;
+}
+.inspector-header .node-label { font-weight: 600; font-size: 12px; }
+.inspector-header .close-btn {
+  width: 20px; height: 20px; border: none; background: none; color: var(--text-dim);
+  cursor: pointer; font-size: 14px; border-radius: 4px; display: flex;
+  align-items: center; justify-content: center;
+}
+.inspector-header .close-btn:hover { background: var(--bg-panel-hover); color: var(--text); }
+.inspector-body { padding: 8px 0; max-height: 400px; overflow-y: auto; }
+.inspector-body::-webkit-scrollbar { width: 6px; }
+.inspector-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Tree view */
+.tree-node { padding: 0 12px; }
+.tree-row {
+  display: flex; align-items: center; gap: 4px; padding: 2px 0; cursor: default;
+  border-radius: 3px;
+}
+.tree-row:hover { background: rgba(255,255,255,0.03); }
+.tree-toggle {
+  width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-dim); font-size: 10px; flex-shrink: 0;
+}
+.tree-key { color: var(--purple); }
+.tree-colon { color: var(--text-dim); margin: 0 2px; }
+.tree-value { color: var(--green); }
+.tree-value.string { color: var(--orange); }
+.tree-value.number { color: var(--accent); }
+.tree-value.boolean { color: var(--yellow); }
+.tree-value.null { color: var(--text-dim); font-style: italic; }
+.tree-type { color: var(--text-dim); font-size: 10px; }
+.tree-children { padding-left: 16px; }
+.tree-row.flash { animation: flashHighlight 0.6s ease-out; }
+@keyframes flashHighlight {
+  0% { background: rgba(74,158,255,0.3); }
+  100% { background: transparent; }
+}
+
+/* Toasts */
+#toast-container {
+  position: absolute; top: 56px; right: 16px; z-index: 300;
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.toast {
+  padding: 8px 14px; border-radius: 6px; background: var(--bg-panel);
+  border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  font-size: 11px; animation: toastIn 0.3s ease-out;
+  max-width: 320px; pointer-events: auto;
+}
+.toast.fade-out { animation: toastOut 0.3s ease-in forwards; }
+@keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateX(20px); } }
+
+/* Help overlay */
+#help-overlay {
+  display: none; position: absolute; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+}
+#help-overlay.visible { display: flex; }
+#help-content {
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+}
+#help-content h2 { color: var(--text-bright); margin-bottom: 16px; font-size: 16px; }
+#help-content h3 { color: var(--accent); margin: 12px 0 6px; font-size: 13px; }
+#help-content p, #help-content li { color: var(--text); margin-bottom: 4px; font-size: 12px; line-height: 1.5; }
+#help-content kbd {
+  display: inline-block; padding: 2px 6px; border: 1px solid var(--border);
+  border-radius: 3px; background: var(--bg); font-size: 10px;
+}
+#help-content .close-help {
+  float: right; background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: 18px;
+}
+
+/* Connection mode indicator */
+#connection-mode-indicator {
+  display: none; position: absolute; top: 56px; left: 50%;
+  transform: translateX(-50%); z-index: 200;
+  background: var(--accent); color: #fff; padding: 6px 16px; border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+}
+
+/* Event Sidebar */
+#event-sidebar {
+  position: absolute; left: 0; top: 44px; bottom: 100px; width: 280px;
+  background: var(--bg-panel); border-right: 1px solid var(--border);
+  overflow-y: auto; z-index: 100; display: flex; flex-direction: column;
+}
+#event-sidebar::-webkit-scrollbar { width: 6px; }
+#event-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#event-sidebar-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg-panel); z-index: 1;
+  font-size: 12px; font-weight: 600; color: var(--text-bright);
+}
+#event-list { flex: 1; overflow-y: auto; }
+#event-list::-webkit-scrollbar { width: 6px; }
+#event-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.event-row {
+  padding: 6px 12px; border-bottom: 1px solid var(--border); cursor: pointer;
+  transition: background 0.1s;
+}
+.event-row:hover { background: var(--bg-panel-hover); }
+.event-row .event-row-summary {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+}
+.event-row .event-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+}
+.event-row .event-type-label {
+  color: var(--text-dim); font-size: 10px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; max-width: 120px;
+}
+.event-row .event-desc {
+  color: var(--text); font-size: 11px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.event-row.expanded { background: rgba(74,158,255,0.08); }
+.event-row.expanded .event-desc { white-space: normal; overflow: visible; }
+.event-row .event-snapshot {
+  display: none; margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid var(--border); font-size: 11px;
+}
+.event-row.expanded .event-snapshot { display: block; }
+.event-row .snapshot-node-label {
+  font-weight: 600; font-size: 11px; margin-bottom: 2px; padding: 2px 0;
+}
+.sidebar-hidden #event-sidebar { display: none; }
+.sidebar-hidden #canvas-container, .sidebar-hidden #timeline-panel { left: 0 !important; }
+</style>
+</head>
+<body>
+
+<!-- Action Bar -->
+<div id="action-bar">
+  <span class="title">Peerbit Architecture</span>
+  <button class="action-btn primary" onclick="engine.addNode()" title="Add a new peer node (N)">+ Add Node</button>
+  <div class="separator"></div>
+  <div class="layer-toggle" data-layer="transport" onclick="toggleLayer(this)">
+    <span class="layer-dot" style="background:var(--accent)"></span>
+    <span>Transport</span>
+  </div>
+  <div class="layer-toggle" data-layer="pubsub" onclick="toggleLayer(this)">
+    <span class="layer-dot" style="background:var(--green)"></span>
+    <span>PubSub</span>
+  </div>
+  <div class="layer-toggle" data-layer="blocks" onclick="toggleLayer(this)">
+    <span class="layer-dot" style="background:var(--orange)"></span>
+    <span>Blocks</span>
+  </div>
+  <div class="layer-toggle" data-layer="ranges" onclick="toggleLayer(this)">
+    <span class="layer-dot" style="background:var(--purple)"></span>
+    <span>Ranges</span>
+  </div>
+  <div class="layer-toggle" data-layer="entries" onclick="toggleLayer(this)">
+    <span class="layer-dot" style="background:var(--yellow)"></span>
+    <span>Entries</span>
+  </div>
+  <div class="separator"></div>
+  <select id="scenario-select" onchange="loadScenario(this.value)">
+    <option value="">Load Scenario...</option>
+    <option value="3-node-replication">3-Node Replication</option>
+    <option value="dynamic-sharding">Dynamic Sharding</option>
+    <option value="entry-lifecycle">Entry Lifecycle</option>
+  </select>
+  <div style="flex:1"></div>
+  <button class="action-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Event Log (E)">Event Log</button>
+  <button class="action-btn" onclick="showHelp()" title="Help (?)">? Help</button>
+</div>
+
+<!-- Event Sidebar -->
+<div id="event-sidebar">
+  <div id="event-sidebar-header">
+    <span>Event Log</span>
+    <button class="action-btn" onclick="clearEventSidebar()" title="Clear">Clear</button>
+  </div>
+  <div id="event-list"></div>
+</div>
+
+<!-- Canvas -->
+<div id="canvas-container">
+  <canvas id="main-canvas"></canvas>
+</div>
+
+<!-- Connection mode indicator -->
+<div id="connection-mode-indicator">Click a node to connect to — press Esc to cancel</div>
+
+<!-- Context Menu -->
+<div id="context-menu"></div>
+<div id="connect-submenu"></div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Timeline -->
+<div id="timeline-panel">
+  <div id="timeline-controls">
+    <button class="timeline-btn" onclick="timeline.skipToStart()" title="Skip to start">⏮</button>
+    <button class="timeline-btn" onclick="timeline.stepBack()" title="Step back">|◀</button>
+    <button class="timeline-btn" id="play-btn" onclick="timeline.togglePlay()" title="Play/Pause (Space)">▶</button>
+    <button class="timeline-btn" onclick="timeline.stepForward()" title="Step forward">▶|</button>
+    <button class="timeline-btn" onclick="timeline.skipToEnd()" title="Skip to end">⏭</button>
+    <div class="separator"></div>
+    <button class="timeline-btn" onclick="timeline.cycleSpeed()" title="Cycle speed"><span id="speed-display">1x</span></button>
+    <div class="separator"></div>
+    <span id="event-counter">Events: 0</span>
+  </div>
+  <div id="timeline-slider-container">
+    <div id="event-markers"></div>
+    <input type="range" id="timeline-slider" min="0" max="0" value="0" oninput="timeline.seekTo(+this.value)">
+  </div>
+  <div id="event-description">Ready — right-click the canvas to add nodes or use the button above</div>
+</div>
+
+<!-- Help Overlay -->
+<div id="help-overlay">
+  <div id="help-content">
+    <button class="close-help" onclick="hideHelp()">×</button>
+    <h2>Peerbit Architecture Visualization</h2>
+    <p>Interactive visualization of Peerbit's P2P database architecture showing data flow across all layers.</p>
+    <h3>Mouse Controls</h3>
+    <ul>
+      <li>Drag nodes to reposition them</li>
+      <li>Scroll to zoom in/out</li>
+      <li>Drag on empty space to pan</li>
+      <li>Right-click a node for actions</li>
+      <li>Right-click empty space to add a node</li>
+      <li>Double-click a node to open its inspector</li>
+    </ul>
+    <h3>Keyboard Shortcuts</h3>
+    <ul>
+      <li><kbd>N</kbd> — Add a new node</li>
+      <li><kbd>Space</kbd> — Play/Pause timeline</li>
+      <li><kbd>←</kbd> / <kbd>→</kbd> — Step backward/forward</li>
+      <li><kbd>Home</kbd> / <kbd>End</kbd> — Jump to start/end</li>
+      <li><kbd>+</kbd> / <kbd>-</kbd> — Zoom in/out</li>
+      <li><kbd>E</kbd> — Toggle Event Log sidebar</li>
+      <li><kbd>?</kbd> — Toggle this help</li>
+      <li><kbd>Esc</kbd> — Cancel connection / close menus</li>
+    </ul>
+    <h3>Architecture Layers</h3>
+    <ul>
+      <li><b style="color:var(--accent)">Transport</b> — libp2p connections (TCP/WS/WebRTC)</li>
+      <li><b style="color:var(--green)">PubSub</b> — DirectSub topic subscriptions & messages</li>
+      <li><b style="color:var(--orange)">Blocks</b> — DirectBlock content-addressed storage</li>
+      <li><b style="color:var(--purple)">Ranges</b> — Replication range assignments (0..1 circular space)</li>
+      <li><b style="color:var(--yellow)">Entries</b> — Log entries with DAG structure</li>
+    </ul>
+    <h3>Peerbit Data Flow</h3>
+    <p>When peers connect: Transport → PubSub ready → Blocks ready → Exchange heads → Replicate entries.</p>
+    <p>SharedLog entries are assigned coordinates in a circular 0..1 space. Each peer's replication range determines which entries it stores.</p>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SIMULATION ENGINE — State machine for the Peerbit simulation
+   ============================================================ */
+
+// Constants
+const MAX_U32 = 4294967295;
+const NODE_COLORS = ['#4a9eff','#00cc88','#ff8844','#bc8cff','#f778ba','#e3b341','#f85149','#79c0ff','#56d4dd','#d2a8ff'];
+const NODE_NAMES = ['Alice','Bob','Carol','Dave','Eve','Frank','Grace','Heidi','Ivan','Judy','Karl','Liam','Mia','Nina','Oscar'];
+let nextNodeId = 0;
+let nextConnId = 0;
+let nextProgramId = 0;
+let nextEntryId = 0;
+
+// Generate a short random hash
+function shortHash() {
+  return Math.random().toString(36).substr(2, 8);
+}
+
+// ---- Data structures ----
+
+function createNode(overrides = {}) {
+  const id = nextNodeId++;
+  const name = overrides.name || NODE_NAMES[id % NODE_NAMES.length];
+  const color = overrides.color || NODE_COLORS[id % NODE_COLORS.length];
+  return {
+    id,
+    peerId: 'peer-' + shortHash(),
+    publicKeyHash: shortHash(),
+    displayName: name,
+    color,
+    programs: new Map(),       // address → SimProgram
+    connections: new Set(),    // connectionId set
+    pubsub: { subscriptions: new Set(), topicSubscribers: new Map() },
+    blockStore: { blocks: new Map(), totalSize: 0 },
+    position: { x: overrides.x || 0, y: overrides.y || 0 },
+    status: 'active',
+    ...overrides
+  };
+}
+
+function createConnection(fromId, toId, overrides = {}) {
+  return {
+    id: nextConnId++,
+    fromNodeId: fromId,
+    toNodeId: toId,
+    state: 'connecting',
+    layers: { transport: false, pubsub: false, blocks: false },
+    latencyMs: 50 + Math.random() * 100,
+    bandwidth: 1000000,
+    ...overrides
+  };
+}
+
+function createProgram(type = 'SharedLog', overrides = {}) {
+  const id = nextProgramId++;
+  return {
+    id,
+    address: 'program-' + shortHash(),
+    type,
+    name: (type === 'Documents' ? 'DocumentStore' : 'SharedLog') + '-' + id,
+    closed: false,
+    sharedLogs: new Map(),  // id → SimSharedLog
+    topics: [],
+    children: [],
+    ...overrides
+  };
+}
+
+function createSharedLog(programAddress, overrides = {}) {
+  const id = shortHash();
+  return {
+    id,
+    programAddress,
+    entries: new Map(),      // hash → SimEntry
+    heads: new Set(),
+    replicationRanges: new Map(), // rangeId → SimReplicationRange
+    replicas: { min: 1, max: undefined },
+    syncState: { pendingSync: new Set(), syncedWith: new Set() },
+    ...overrides
+  };
+}
+
+function createEntry(creatorPeerId, logId, overrides = {}) {
+  const hash = 'e' + (nextEntryId++).toString().padStart(4, '0');
+  return {
+    hash,
+    gid: overrides.gid || 'g-' + shortHash(),
+    data: overrides.data || 'entry-' + hash,
+    creatorPeerId,
+    logId,
+    clock: { timestamp: Date.now(), counter: nextEntryId },
+    next: overrides.next || [],
+    coordinate: overrides.coordinate !== undefined ? overrides.coordinate : Math.random(),
+    replicatedBy: new Set([creatorPeerId]),
+    size: 128 + Math.floor(Math.random() * 256),
+  };
+}
+
+function createReplicationRange(publicKeyHash, overrides = {}) {
+  const offset = overrides.offset !== undefined ? overrides.offset : Math.random();
+  const width = overrides.width !== undefined ? overrides.width : 0.3 + Math.random() * 0.2;
+  return {
+    id: shortHash(),
+    publicKeyHash,
+    offset,
+    width: Math.min(width, 1.0),
+    mode: overrides.mode || 'non-strict',
+    matured: overrides.matured !== undefined ? overrides.matured : false,
+    timestamp: Date.now(),
+  };
+}
+
+// Get replication range segments handling wraparound (mirrors getSegmentsFromOffsetAndRange)
+function getRangeSegments(offset, width) {
+  const end = offset + width;
+  if (end <= 1.0) {
+    return [[offset, end]];
+  }
+  return [[offset, 1.0], [0, end - 1.0]];
+}
+
+function rangeContains(range, point) {
+  const segments = getRangeSegments(range.offset, range.width);
+  for (const [s, e] of segments) {
+    if (point >= s && point <= e) return true;
+  }
+  return false;
+}
+
+// ---- Event System ----
+
+const EVENT_COLORS = {
+  'node:create': '#4a9eff', 'node:destroy': '#f85149',
+  'connection:dial': '#4a9eff', 'connection:established': '#4a9eff',
+  'connection:hangup': '#f85149',
+  'connection:pubsub-ready': '#00cc88', 'connection:blocks-ready': '#ff8844',
+  'pubsub:subscribe': '#00cc88', 'pubsub:unsubscribe': '#00cc88', 'pubsub:message': '#00cc88',
+  'block:request': '#ff8844', 'block:deliver': '#ff8844',
+  'program:open': '#bc8cff', 'program:close': '#bc8cff', 'program:drop': '#f85149',
+  'sharedlog:append': '#e3b341', 'sharedlog:exchange-heads': '#e3b341',
+  'sharedlog:sync-request': '#e3b341', 'sharedlog:sync-complete': '#e3b341',
+  'replication:range-announce': '#bc8cff', 'replication:entry-replicate': '#f778ba',
+  'replication:prune': '#f85149',
+  'replicator:join': '#00cc88', 'replicator:leave': '#f85149', 'replicator:mature': '#e3b341',
+  'document:put': '#e3b341', 'document:delete': '#f85149',
+  'rpc:request': '#79c0ff', 'rpc:response': '#79c0ff',
+};
+
+function createEvent(type, description, details = {}) {
+  return {
+    id: engine.eventLog.length,
+    type,
+    description,
+    details,
+    timestamp: Date.now(),
+    color: EVENT_COLORS[type] || '#8b949e',
+  };
+}
+
+// ---- Simulation Engine ----
+
+const engine = {
+  nodes: new Map(),
+  connections: new Map(),
+  eventLog: [],
+  pendingEvents: [],
+  particles: [],
+  layerVisibility: { transport: true, pubsub: true, blocks: true, ranges: true, entries: true },
+  inspectors: new Map(),  // nodeId → inspector panel element
+  connectionMode: null,   // { fromNodeId } when connecting
+
+  // State snapshots for timeline scrubbing
+  checkpoints: [],
+  checkpointInterval: 50,
+
+  addNode(overrides = {}) {
+    const cx = canvas.width / (2 * devicePixelRatio);
+    const cy = canvas.height / (2 * devicePixelRatio);
+    if (!overrides.x) overrides.x = cx + (Math.random() - 0.5) * 200;
+    if (!overrides.y) overrides.y = cy + (Math.random() - 0.5) * 200;
+    const node = createNode(overrides);
+    this.nodes.set(node.id, node);
+
+    const evt = createEvent('node:create', `${node.displayName} joined the network`, { nodeId: node.id });
+    this.pushEvent(evt);
+
+    renderer.updateForceLayout();
+    showToast(`${node.displayName} joined`, node.color);
+    return node;
+  },
+
+  removeNode(nodeId) {
+    const node = this.nodes.get(nodeId);
+    if (!node) return;
+
+    // Close all programs first
+    for (const [addr, prog] of node.programs) {
+      this.closeProgram(nodeId, addr);
+    }
+
+    // Disconnect all connections
+    for (const connId of [...node.connections]) {
+      this.removeConnection(connId);
+    }
+
+    // Close inspector
+    this.closeInspector(nodeId);
+
+    node.status = 'stopped';
+    this.nodes.delete(nodeId);
+
+    const evt = createEvent('node:destroy', `${node.displayName} left the network`, { nodeId });
+    this.pushEvent(evt);
+
+    renderer.updateForceLayout();
+    showToast(`${node.displayName} left`, '#f85149');
+  },
+
+  addConnection(fromNodeId, toNodeId) {
+    const fromNode = this.nodes.get(fromNodeId);
+    const toNode = this.nodes.get(toNodeId);
+    if (!fromNode || !toNode) return null;
+
+    // Check if already connected
+    for (const connId of fromNode.connections) {
+      const c = this.connections.get(connId);
+      if (c && ((c.fromNodeId === fromNodeId && c.toNodeId === toNodeId) ||
+                (c.fromNodeId === toNodeId && c.toNodeId === fromNodeId))) {
+        return null;
+      }
+    }
+
+    const conn = createConnection(fromNodeId, toNodeId);
+    this.connections.set(conn.id, conn);
+    fromNode.connections.add(conn.id);
+    toNode.connections.add(conn.id);
+
+    // Schedule cascading events
+    const evt = createEvent('connection:dial', `${fromNode.displayName} dialing ${toNode.displayName}`, { connectionId: conn.id, fromNodeId, toNodeId });
+    this.pushEvent(evt);
+
+    // Transport established
+    this.schedulePendingEvent(conn.latencyMs, () => {
+      conn.state = 'connected';
+      conn.layers.transport = true;
+      const evt2 = createEvent('connection:established', `${fromNode.displayName} ↔ ${toNode.displayName} transport ready`, { connectionId: conn.id });
+      this.pushEvent(evt2);
+    });
+
+    // PubSub ready
+    this.schedulePendingEvent(conn.latencyMs + 30, () => {
+      conn.layers.pubsub = true;
+      const evt3 = createEvent('connection:pubsub-ready', `${fromNode.displayName} ↔ ${toNode.displayName} pubsub ready`, { connectionId: conn.id });
+      this.pushEvent(evt3);
+    });
+
+    // Blocks ready
+    this.schedulePendingEvent(conn.latencyMs + 60, () => {
+      conn.layers.blocks = true;
+      const evt4 = createEvent('connection:blocks-ready', `${fromNode.displayName} ↔ ${toNode.displayName} blocks ready`, { connectionId: conn.id });
+      this.pushEvent(evt4);
+
+      // After all layers up, exchange heads if shared programs
+      this.exchangeHeadsIfNeeded(fromNodeId, toNodeId);
+    });
+
+    return conn;
+  },
+
+  removeConnection(connId) {
+    const conn = this.connections.get(connId);
+    if (!conn) return;
+
+    const fromNode = this.nodes.get(conn.fromNodeId);
+    const toNode = this.nodes.get(conn.toNodeId);
+
+    if (fromNode) fromNode.connections.delete(connId);
+    if (toNode) toNode.connections.delete(connId);
+
+    conn.state = 'disconnecting';
+    const fromName = fromNode ? fromNode.displayName : '?';
+    const toName = toNode ? toNode.displayName : '?';
+    const evt = createEvent('connection:hangup', `${fromName} ↔ ${toName} disconnected`, { connectionId: connId });
+    this.pushEvent(evt);
+
+    this.connections.delete(connId);
+  },
+
+  openProgram(nodeId, type = 'SharedLog') {
+    const node = this.nodes.get(nodeId);
+    if (!node) return null;
+
+    const program = createProgram(type);
+    const log = createSharedLog(program.address);
+    program.sharedLogs.set(log.id, log);
+    program.topics = [program.address];
+    node.programs.set(program.address, program);
+
+    // Subscribe to topic
+    node.pubsub.subscriptions.add(program.address);
+
+    // Create default replication range for this node
+    const range = createReplicationRange(node.publicKeyHash, {
+      offset: Math.random(),
+      width: 0.33,
+    });
+    log.replicationRanges.set(range.id, range);
+
+    const evt = createEvent('program:open', `${node.displayName} opened ${program.name}`, { nodeId, programAddress: program.address });
+    this.pushEvent(evt);
+
+    // Announce range
+    this.schedulePendingEvent(20, () => {
+      range.matured = true;
+      const evt2 = createEvent('replication:range-announce', `${node.displayName} announced range [${range.offset.toFixed(2)}..${(range.offset + range.width).toFixed(2)}]`, { nodeId, rangeId: range.id });
+      this.pushEvent(evt2);
+
+      const evt3 = createEvent('replicator:join', `${node.displayName} joined as replicator`, { nodeId, programAddress: program.address });
+      this.pushEvent(evt3);
+    });
+
+    // Exchange heads with connected peers who have same program
+    this.schedulePendingEvent(50, () => {
+      for (const connId of node.connections) {
+        const conn = this.connections.get(connId);
+        if (!conn || conn.state !== 'connected') continue;
+        const otherId = conn.fromNodeId === nodeId ? conn.toNodeId : conn.fromNodeId;
+        this.exchangeHeadsIfNeeded(nodeId, otherId);
+      }
+    });
+
+    showToast(`${node.displayName}: ${program.name} opened`, node.color);
+    this.updateInspector(nodeId);
+    return program;
+  },
+
+  // Open the same program address on another node
+  openProgramByAddress(nodeId, address) {
+    const node = this.nodes.get(nodeId);
+    if (!node) return null;
+    if (node.programs.has(address)) return node.programs.get(address);
+
+    // Find original program to copy structure
+    let originalProg = null;
+    for (const [, n] of this.nodes) {
+      if (n.programs.has(address)) { originalProg = n.programs.get(address); break; }
+    }
+    if (!originalProg) return this.openProgram(nodeId);
+
+    const program = createProgram(originalProg.type, { address, name: originalProg.name });
+    const log = createSharedLog(address);
+    program.sharedLogs.set(log.id, log);
+    program.topics = [address];
+    node.programs.set(address, program);
+    node.pubsub.subscriptions.add(address);
+
+    // Create range for this node
+    const range = createReplicationRange(node.publicKeyHash, {
+      offset: Math.random(),
+      width: 0.33,
+    });
+    log.replicationRanges.set(range.id, range);
+
+    const evt = createEvent('program:open', `${node.displayName} opened ${program.name}`, { nodeId, programAddress: address });
+    this.pushEvent(evt);
+
+    this.schedulePendingEvent(20, () => {
+      range.matured = true;
+      const evt2 = createEvent('replication:range-announce', `${node.displayName} announced range [${range.offset.toFixed(2)}..${(range.offset + range.width).toFixed(2)}]`, { nodeId, rangeId: range.id });
+      this.pushEvent(evt2);
+      const evt3 = createEvent('replicator:join', `${node.displayName} joined as replicator`, { nodeId, programAddress: address });
+      this.pushEvent(evt3);
+    });
+
+    // Exchange heads with connected peers
+    this.schedulePendingEvent(50, () => {
+      for (const connId of node.connections) {
+        const conn = this.connections.get(connId);
+        if (!conn || conn.state !== 'connected') continue;
+        const otherId = conn.fromNodeId === nodeId ? conn.toNodeId : conn.fromNodeId;
+        this.exchangeHeadsIfNeeded(nodeId, otherId);
+      }
+    });
+
+    showToast(`${node.displayName}: ${program.name} opened`, node.color);
+    this.updateInspector(nodeId);
+    return program;
+  },
+
+  closeProgram(nodeId, address) {
+    const node = this.nodes.get(nodeId);
+    if (!node) return;
+    const program = node.programs.get(address);
+    if (!program) return;
+
+    program.closed = true;
+    node.pubsub.subscriptions.delete(address);
+    node.programs.delete(address);
+
+    const evt = createEvent('program:close', `${node.displayName} closed ${program.name}`, { nodeId, programAddress: address });
+    this.pushEvent(evt);
+
+    this.updateInspector(nodeId);
+  },
+
+  appendEntry(nodeId, programAddress, data) {
+    const node = this.nodes.get(nodeId);
+    if (!node) return null;
+    const program = node.programs.get(programAddress);
+    if (!program) return null;
+
+    const log = program.sharedLogs.values().next().value;
+    if (!log) return null;
+
+    // Get heads as next references (DAG linking)
+    const next = [...log.heads];
+    const entry = createEntry(node.peerId, log.id, { data, next });
+    log.entries.set(entry.hash, entry);
+
+    // Update heads: remove previous heads, add new entry
+    log.heads.clear();
+    log.heads.add(entry.hash);
+
+    const evt = createEvent('sharedlog:append', `${node.displayName} appended entry [${entry.hash}]`, { nodeId, entryHash: entry.hash, programAddress });
+    this.pushEvent(evt);
+
+    // Replicate to connected peers with same program
+    this.schedulePendingEvent(30, () => {
+      this.replicateEntry(nodeId, programAddress, entry);
+    });
+
+    this.updateInspector(nodeId);
+    return entry;
+  },
+
+  replicateEntry(sourceNodeId, programAddress, entry) {
+    const sourceNode = this.nodes.get(sourceNodeId);
+    if (!sourceNode) return;
+
+    for (const connId of sourceNode.connections) {
+      const conn = this.connections.get(connId);
+      if (!conn || conn.state !== 'connected' || !conn.layers.blocks) continue;
+
+      const targetId = conn.fromNodeId === sourceNodeId ? conn.toNodeId : conn.fromNodeId;
+      const targetNode = this.nodes.get(targetId);
+      if (!targetNode) continue;
+
+      const targetProg = targetNode.programs.get(programAddress);
+      if (!targetProg) continue;
+
+      const targetLog = targetProg.sharedLogs.values().next().value;
+      if (!targetLog || targetLog.entries.has(entry.hash)) continue;
+
+      // Add particle animation
+      this.addParticle(sourceNodeId, targetId, '#f778ba', 'entry');
+
+      // Replicate after latency
+      const delay = conn.latencyMs;
+      this.schedulePendingEvent(delay, () => {
+        targetLog.entries.set(entry.hash, { ...entry, replicatedBy: new Set([...entry.replicatedBy, targetNode.peerId]) });
+        entry.replicatedBy.add(targetNode.peerId);
+
+        // Update target heads
+        for (const h of entry.next) targetLog.heads.delete(h);
+        targetLog.heads.add(entry.hash);
+
+        const evt = createEvent('replication:entry-replicate', `${entry.hash} replicated to ${targetNode.displayName}`, { sourceNodeId, targetNodeId: targetId, entryHash: entry.hash });
+        this.pushEvent(evt);
+
+        this.updateInspector(targetId);
+
+        // Cascading replication: target also replicates to its other peers
+        for (const connId2 of targetNode.connections) {
+          const conn2 = this.connections.get(connId2);
+          if (!conn2 || conn2.state !== 'connected' || !conn2.layers.blocks) continue;
+          const nextId = conn2.fromNodeId === targetId ? conn2.toNodeId : conn2.fromNodeId;
+          if (nextId === sourceNodeId) continue; // don't send back to source
+          const nextNode = this.nodes.get(nextId);
+          if (!nextNode || !nextNode.programs.has(programAddress)) continue;
+          const nextLog = nextNode.programs.get(programAddress).sharedLogs.values().next().value;
+          if (nextLog && !nextLog.entries.has(entry.hash)) {
+            this.schedulePendingEvent(conn2.latencyMs, () => {
+              this.replicateEntryDirect(targetId, nextId, programAddress, entry);
+            });
+          }
+        }
+      });
+    }
+  },
+
+  replicateEntryDirect(sourceNodeId, targetNodeId, programAddress, entry) {
+    const targetNode = this.nodes.get(targetNodeId);
+    if (!targetNode) return;
+    const targetProg = targetNode.programs.get(programAddress);
+    if (!targetProg) return;
+    const targetLog = targetProg.sharedLogs.values().next().value;
+    if (!targetLog || targetLog.entries.has(entry.hash)) return;
+
+    this.addParticle(sourceNodeId, targetNodeId, '#f778ba', 'entry');
+    targetLog.entries.set(entry.hash, { ...entry, replicatedBy: new Set([...entry.replicatedBy, targetNode.peerId]) });
+    entry.replicatedBy.add(targetNode.peerId);
+    for (const h of entry.next) targetLog.heads.delete(h);
+    targetLog.heads.add(entry.hash);
+
+    const evt = createEvent('replication:entry-replicate', `${entry.hash} replicated to ${targetNode.displayName}`, { sourceNodeId, targetNodeId, entryHash: entry.hash });
+    this.pushEvent(evt);
+    this.updateInspector(targetNodeId);
+  },
+
+  exchangeHeadsIfNeeded(nodeIdA, nodeIdB) {
+    const nodeA = this.nodes.get(nodeIdA);
+    const nodeB = this.nodes.get(nodeIdB);
+    if (!nodeA || !nodeB) return;
+
+    for (const [address, progA] of nodeA.programs) {
+      const progB = nodeB.programs.get(address);
+      if (!progB) continue;
+
+      const logA = progA.sharedLogs.values().next().value;
+      const logB = progB.sharedLogs.values().next().value;
+      if (!logA || !logB) continue;
+
+      // Exchange heads event
+      const evt = createEvent('sharedlog:exchange-heads', `${nodeA.displayName} ↔ ${nodeB.displayName} exchanging heads for ${progA.name}`, { nodeIdA, nodeIdB, programAddress: address });
+      this.pushEvent(evt);
+
+      // Add particles
+      this.addParticle(nodeIdA, nodeIdB, '#e3b341', 'heads');
+      this.addParticle(nodeIdB, nodeIdA, '#e3b341', 'heads');
+
+      // Sync missing entries A → B
+      for (const [hash, entry] of logA.entries) {
+        if (!logB.entries.has(hash)) {
+          this.schedulePendingEvent(80, () => {
+            this.replicateEntryDirect(nodeIdA, nodeIdB, address, entry);
+          });
+        }
+      }
+      // Sync missing entries B → A
+      for (const [hash, entry] of logB.entries) {
+        if (!logA.entries.has(hash)) {
+          this.schedulePendingEvent(80, () => {
+            this.replicateEntryDirect(nodeIdB, nodeIdA, address, entry);
+          });
+        }
+      }
+
+      // Share replication ranges
+      for (const [, rangeA] of logA.replicationRanges) {
+        if (!logB.replicationRanges.has(rangeA.id)) {
+          logB.replicationRanges.set(rangeA.id, { ...rangeA });
+        }
+      }
+      for (const [, rangeB] of logB.replicationRanges) {
+        if (!logA.replicationRanges.has(rangeB.id)) {
+          logA.replicationRanges.set(rangeB.id, { ...rangeB });
+        }
+      }
+    }
+  },
+
+  putDocument(nodeId, programAddress, docData) {
+    const node = this.nodes.get(nodeId);
+    if (!node) return null;
+    const entry = this.appendEntry(nodeId, programAddress, JSON.stringify({ op: 'put', ...docData }));
+    if (entry) {
+      const evt = createEvent('document:put', `${node.displayName} put document "${docData.key || docData.id || 'doc'}"`, { nodeId, programAddress, entryHash: entry.hash });
+      this.pushEvent(evt);
+    }
+    return entry;
+  },
+
+  deleteDocument(nodeId, programAddress, key) {
+    const node = this.nodes.get(nodeId);
+    if (!node) return null;
+    const entry = this.appendEntry(nodeId, programAddress, JSON.stringify({ op: 'delete', key }));
+    if (entry) {
+      const evt = createEvent('document:delete', `${node.displayName} deleted document "${key}"`, { nodeId, programAddress, entryHash: entry.hash });
+      this.pushEvent(evt);
+    }
+    return entry;
+  },
+
+  // Particles for animation
+  addParticle(fromNodeId, toNodeId, color, type = 'data') {
+    this.particles.push({
+      fromNodeId, toNodeId, color, type,
+      progress: 0, speed: 0.015 + Math.random() * 0.01,
+      size: type === 'entry' ? 4 : 3,
+    });
+  },
+
+  // Schedule a callback after delay (processed during timeline play)
+  schedulePendingEvent(delayMs, callback) {
+    const executeAt = Date.now() + delayMs;
+    this.pendingEvents.push({ executeAt, callback });
+    this.pendingEvents.sort((a, b) => a.executeAt - b.executeAt);
+  },
+
+  processPendingEvents() {
+    const now = Date.now();
+    while (this.pendingEvents.length > 0 && this.pendingEvents[0].executeAt <= now) {
+      const pe = this.pendingEvents.shift();
+      pe.callback();
+    }
+  },
+
+  pushEvent(evt) {
+    // Capture state snapshots for affected nodes
+    const affectedIds = getAffectedNodeIds(evt.details);
+    evt.nodeSnapshots = {};
+    for (const nid of affectedIds) {
+      const node = this.nodes.get(nid);
+      if (node) evt.nodeSnapshots[nid] = buildNodeStateTree(node);
+    }
+
+    this.eventLog.push(evt);
+    timeline.onEventAdded(evt);
+    addEventToSidebar(evt);
+    this.updateAllInspectors();
+
+    // Checkpoint
+    if (this.eventLog.length % this.checkpointInterval === 0) {
+      this.saveCheckpoint();
+    }
+  },
+
+  saveCheckpoint() {
+    // Serialize minimal state snapshot
+    const snap = {
+      eventIndex: this.eventLog.length,
+      nodesData: JSON.stringify([...this.nodes.entries()], mapReplacer),
+      connectionsData: JSON.stringify([...this.connections.entries()], mapReplacer),
+    };
+    this.checkpoints.push(snap);
+  },
+
+  // Inspector management
+  openInspector(nodeId) {
+    if (this.inspectors.has(nodeId)) {
+      this.updateInspector(nodeId);
+      return;
+    }
+    const panel = createInspectorPanel(nodeId);
+    document.body.appendChild(panel);
+    this.inspectors.set(nodeId, panel);
+    this.updateInspector(nodeId);
+  },
+
+  closeInspector(nodeId) {
+    const panel = this.inspectors.get(nodeId);
+    if (panel) {
+      panel.remove();
+      this.inspectors.delete(nodeId);
+    }
+  },
+
+  updateInspector(nodeId) {
+    const panel = this.inspectors.get(nodeId);
+    if (!panel) return;
+    const node = this.nodes.get(nodeId);
+    if (!node) { this.closeInspector(nodeId); return; }
+    renderInspectorTree(panel, node);
+  },
+
+  updateAllInspectors() {
+    for (const nodeId of this.inspectors.keys()) {
+      this.updateInspector(nodeId);
+    }
+  },
+
+  // Get connected node ids
+  getConnectedNodeIds(nodeId) {
+    const node = this.nodes.get(nodeId);
+    if (!node) return [];
+    const ids = [];
+    for (const connId of node.connections) {
+      const conn = this.connections.get(connId);
+      if (conn) {
+        ids.push(conn.fromNodeId === nodeId ? conn.toNodeId : conn.fromNodeId);
+      }
+    }
+    return ids;
+  },
+
+  // Get all program addresses across the network
+  getAllProgramAddresses() {
+    const addresses = new Map(); // address → name
+    for (const [, node] of this.nodes) {
+      for (const [addr, prog] of node.programs) {
+        addresses.set(addr, prog.name);
+      }
+    }
+    return addresses;
+  },
+
+  // Reset everything
+  reset() {
+    this.nodes.clear();
+    this.connections.clear();
+    this.eventLog = [];
+    this.pendingEvents = [];
+    this.particles = [];
+    this.checkpoints = [];
+    for (const [id] of this.inspectors) this.closeInspector(id);
+    this.inspectors.clear();
+    nextNodeId = 0; nextConnId = 0; nextProgramId = 0; nextEntryId = 0;
+    document.getElementById('event-list').innerHTML = '';
+    timeline.reset();
+    renderer.updateForceLayout();
+  },
+};
+
+// JSON serialization helpers for Maps/Sets
+function mapReplacer(key, value) {
+  if (value instanceof Map) return { __type: 'Map', entries: [...value.entries()] };
+  if (value instanceof Set) return { __type: 'Set', values: [...value.values()] };
+  return value;
+}
+
+/* ============================================================
+   CANVAS RENDERER — D3 force layout + Canvas 2D drawing
+   ============================================================ */
+
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d');
+let devicePixelRatio = window.devicePixelRatio || 1;
+
+const renderer = {
+  transform: { x: 0, y: 0, k: 1 },
+  simulation: null,
+  dragging: null,
+  panning: false,
+  panStart: null,
+  hoveredNode: null,
+  width: 0,
+  height: 0,
+
+  init() {
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+
+    // Mouse events
+    canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+    canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+    canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+    canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
+    canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.onContextMenu(e); });
+
+    // D3 force simulation
+    this.simulation = d3.forceSimulation()
+      .force('charge', d3.forceManyBody().strength(-300))
+      .force('center', d3.forceCenter(this.width / 2, this.height / 2))
+      .force('collision', d3.forceCollide().radius(50))
+      .force('link', d3.forceLink().id(d => d.id).distance(180))
+      .on('tick', () => this.syncPositions());
+
+    this.simulation.stop();
+    this.startRenderLoop();
+  },
+
+  resize() {
+    const container = document.getElementById('canvas-container');
+    const rect = container.getBoundingClientRect();
+    this.width = rect.width;
+    this.height = rect.height;
+    canvas.width = rect.width * devicePixelRatio;
+    canvas.height = rect.height * devicePixelRatio;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+
+    if (this.simulation) {
+      this.simulation.force('center', d3.forceCenter(this.width / 2, this.height / 2));
+    }
+  },
+
+  updateForceLayout() {
+    const nodes = [...engine.nodes.values()].map(n => ({
+      id: n.id,
+      x: n.position.x,
+      y: n.position.y,
+      fx: this.dragging && this.dragging.id === n.id ? n.position.x : undefined,
+      fy: this.dragging && this.dragging.id === n.id ? n.position.y : undefined,
+    }));
+
+    const links = [...engine.connections.values()].map(c => ({
+      source: c.fromNodeId,
+      target: c.toNodeId,
+    }));
+
+    this.simulation.nodes(nodes);
+    this.simulation.force('link').links(links);
+    this.simulation.alpha(0.3).restart();
+
+    // Auto-stop after settling
+    setTimeout(() => this.simulation.stop(), 3000);
+  },
+
+  syncPositions() {
+    const simNodes = this.simulation.nodes();
+    for (const sn of simNodes) {
+      const node = engine.nodes.get(sn.id);
+      if (node) {
+        node.position.x = sn.x;
+        node.position.y = sn.y;
+      }
+    }
+  },
+
+  // Transform screen coordinates to world coordinates
+  screenToWorld(sx, sy) {
+    return {
+      x: (sx - this.transform.x) / this.transform.k,
+      y: (sy - this.transform.y) / this.transform.k,
+    };
+  },
+
+  worldToScreen(wx, wy) {
+    return {
+      x: wx * this.transform.k + this.transform.x,
+      y: wy * this.transform.k + this.transform.y,
+    };
+  },
+
+  // Hit test: find node at screen position
+  hitTestNode(sx, sy) {
+    const { x, y } = this.screenToWorld(sx, sy);
+    let closest = null;
+    let closestDist = Infinity;
+    for (const [, node] of engine.nodes) {
+      const dx = node.position.x - x;
+      const dy = node.position.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 30 && dist < closestDist) {
+        closest = node;
+        closestDist = dist;
+      }
+    }
+    return closest;
+  },
+
+  hitTestConnection(sx, sy) {
+    const { x, y } = this.screenToWorld(sx, sy);
+    for (const [, conn] of engine.connections) {
+      const fromNode = engine.nodes.get(conn.fromNodeId);
+      const toNode = engine.nodes.get(conn.toNodeId);
+      if (!fromNode || !toNode) continue;
+      const dist = pointToLineDistance(x, y, fromNode.position.x, fromNode.position.y, toNode.position.x, toNode.position.y);
+      if (dist < 8) return conn;
+    }
+    return null;
+  },
+
+  // Mouse handlers
+  onMouseDown(e) {
+    if (e.button === 2) return; // right click handled by context menu
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    hideContextMenu();
+
+    // Connection mode
+    if (engine.connectionMode) {
+      const node = this.hitTestNode(sx, sy);
+      if (node && node.id !== engine.connectionMode.fromNodeId) {
+        engine.addConnection(engine.connectionMode.fromNodeId, node.id);
+        exitConnectionMode();
+      }
+      return;
+    }
+
+    const node = this.hitTestNode(sx, sy);
+    if (node) {
+      this.dragging = node;
+      this.dragOffset = {
+        x: node.position.x - this.screenToWorld(sx, sy).x,
+        y: node.position.y - this.screenToWorld(sx, sy).y,
+      };
+    } else {
+      this.panning = true;
+      this.panStart = { x: e.clientX - this.transform.x, y: e.clientY - this.transform.y };
+    }
+  },
+
+  onMouseMove(e) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    if (this.dragging) {
+      const { x, y } = this.screenToWorld(sx, sy);
+      this.dragging.position.x = x + this.dragOffset.x;
+      this.dragging.position.y = y + this.dragOffset.y;
+
+      // Update force simulation node
+      const simNode = this.simulation.nodes().find(n => n.id === this.dragging.id);
+      if (simNode) {
+        simNode.fx = this.dragging.position.x;
+        simNode.fy = this.dragging.position.y;
+      }
+    } else if (this.panning) {
+      this.transform.x = e.clientX - this.panStart.x;
+      this.transform.y = e.clientY - this.panStart.y;
+    } else {
+      const node = this.hitTestNode(sx, sy);
+      this.hoveredNode = node;
+      canvas.style.cursor = node ? 'pointer' : (engine.connectionMode ? 'crosshair' : 'default');
+    }
+  },
+
+  onMouseUp(e) {
+    if (this.dragging) {
+      // Release fixed position
+      const simNode = this.simulation.nodes().find(n => n.id === this.dragging.id);
+      if (simNode) { simNode.fx = null; simNode.fy = null; }
+      this.dragging = null;
+    }
+    this.panning = false;
+  },
+
+  onWheel(e) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const delta = -e.deltaY * 0.001;
+    const newK = Math.max(0.2, Math.min(5, this.transform.k * (1 + delta)));
+    const factor = newK / this.transform.k;
+    this.transform.x = mx - (mx - this.transform.x) * factor;
+    this.transform.y = my - (my - this.transform.y) * factor;
+    this.transform.k = newK;
+  },
+
+  onDoubleClick(e) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const node = this.hitTestNode(sx, sy);
+    if (node) {
+      engine.openInspector(node.id);
+    }
+  },
+
+  onContextMenu(e) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const node = this.hitTestNode(sx, sy);
+    const conn = node ? null : this.hitTestConnection(sx, sy);
+
+    if (node) {
+      showNodeContextMenu(e.clientX, e.clientY, node);
+    } else if (conn) {
+      showConnectionContextMenu(e.clientX, e.clientY, conn);
+    } else {
+      showCanvasContextMenu(e.clientX, e.clientY, this.screenToWorld(sx, sy));
+    }
+  },
+
+  // Render loop
+  startRenderLoop() {
+    const loop = () => {
+      engine.processPendingEvents();
+      this.draw();
+      this.updateParticles();
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  },
+
+  draw() {
+    const w = this.width;
+    const h = this.height;
+    ctx.save();
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // Apply camera transform
+    ctx.save();
+    ctx.translate(this.transform.x, this.transform.y);
+    ctx.scale(this.transform.k, this.transform.k);
+
+    // Draw connections
+    if (engine.layerVisibility.transport) {
+      for (const [, conn] of engine.connections) {
+        this.drawConnection(conn);
+      }
+    }
+
+    // Draw particles
+    for (const particle of engine.particles) {
+      this.drawParticle(particle);
+    }
+
+    // Draw nodes
+    for (const [, node] of engine.nodes) {
+      this.drawNode(node);
+    }
+
+    ctx.restore();
+    ctx.restore();
+  },
+
+  drawNode(node) {
+    const x = node.position.x;
+    const y = node.position.y;
+    const r = 24;
+    const isHovered = this.hoveredNode && this.hoveredNode.id === node.id;
+    const isConnectionTarget = engine.connectionMode && node.id !== engine.connectionMode.fromNodeId;
+
+    // Glow for active nodes
+    if (node.status === 'active') {
+      ctx.save();
+      ctx.shadowColor = node.color;
+      ctx.shadowBlur = isHovered ? 20 : 8;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = node.color + '22';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Replication range arcs
+    if (engine.layerVisibility.ranges) {
+      this.drawReplicationRanges(node, x, y, r);
+    }
+
+    // Node circle
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = node.color + (isHovered ? 'cc' : '88');
+    ctx.fill();
+    ctx.strokeStyle = isConnectionTarget ? '#fff' : node.color;
+    ctx.lineWidth = isHovered || isConnectionTarget ? 3 : 2;
+    ctx.stroke();
+
+    // Node label
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const initials = node.displayName.charAt(0);
+    ctx.fillText(initials, x, y);
+
+    // Name below
+    ctx.fillStyle = '#c9d1d9';
+    ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(node.displayName, x, y + r + 14);
+
+    // Badges
+    if (engine.layerVisibility.entries) {
+      const progCount = node.programs.size;
+      let entryCount = 0;
+      for (const [, prog] of node.programs) {
+        for (const [, log] of prog.sharedLogs) entryCount += log.entries.size;
+      }
+      if (progCount > 0) {
+        this.drawBadge(x + r - 4, y - r + 4, progCount.toString(), '#bc8cff');
+      }
+      if (entryCount > 0) {
+        this.drawBadge(x + r - 4, y - r + 18, entryCount.toString(), '#e3b341');
+      }
+    }
+  },
+
+  drawBadge(x, y, text, color) {
+    const w = Math.max(16, ctx.measureText(text).width + 8);
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - 8, w, 16, 8);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 9px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
+  },
+
+  drawReplicationRanges(node, x, y, nodeR) {
+    for (const [, prog] of node.programs) {
+      for (const [, log] of prog.sharedLogs) {
+        let rangeIdx = 0;
+        for (const [, range] of log.replicationRanges) {
+          if (range.publicKeyHash !== node.publicKeyHash) continue;
+          const arcR = nodeR + 6 + rangeIdx * 5;
+          const segments = getRangeSegments(range.offset, range.width);
+          for (const [start, end] of segments) {
+            const startAngle = start * Math.PI * 2 - Math.PI / 2;
+            const endAngle = end * Math.PI * 2 - Math.PI / 2;
+            ctx.beginPath();
+            ctx.arc(x, y, arcR, startAngle, endAngle);
+            ctx.strokeStyle = range.matured ? node.color : (node.color + '66');
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+          }
+          rangeIdx++;
+        }
+      }
+    }
+  },
+
+  drawConnection(conn) {
+    const fromNode = engine.nodes.get(conn.fromNodeId);
+    const toNode = engine.nodes.get(conn.toNodeId);
+    if (!fromNode || !toNode) return;
+
+    ctx.beginPath();
+    ctx.moveTo(fromNode.position.x, fromNode.position.y);
+    ctx.lineTo(toNode.position.x, toNode.position.y);
+
+    if (conn.state === 'connecting') {
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = '#4a9eff44';
+    } else if (conn.state === 'connected') {
+      ctx.setLineDash([]);
+      let color = '#4a9eff';
+      let alpha = '55';
+      if (conn.layers.blocks) alpha = '88';
+      ctx.strokeStyle = color + alpha;
+    } else {
+      ctx.setLineDash([2, 4]);
+      ctx.strokeStyle = '#f8514944';
+    }
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Layer indicators (small dots along the connection)
+    if (conn.state === 'connected') {
+      const mx = (fromNode.position.x + toNode.position.x) / 2;
+      const my = (fromNode.position.y + toNode.position.y) / 2;
+      const dx = toNode.position.x - fromNode.position.x;
+      const dy = toNode.position.y - fromNode.position.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 0) {
+        const nx = -dy / len;
+        const ny = dx / len;
+
+        if (engine.layerVisibility.pubsub && conn.layers.pubsub) {
+          ctx.beginPath();
+          ctx.arc(mx + nx * 6, my + ny * 6, 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#00cc88';
+          ctx.fill();
+        }
+        if (engine.layerVisibility.blocks && conn.layers.blocks) {
+          ctx.beginPath();
+          ctx.arc(mx - nx * 6, my - ny * 6, 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#ff8844';
+          ctx.fill();
+        }
+      }
+    }
+  },
+
+  drawParticle(p) {
+    const fromNode = engine.nodes.get(p.fromNodeId);
+    const toNode = engine.nodes.get(p.toNodeId);
+    if (!fromNode || !toNode) return;
+
+    const x = fromNode.position.x + (toNode.position.x - fromNode.position.x) * p.progress;
+    const y = fromNode.position.y + (toNode.position.y - fromNode.position.y) * p.progress;
+
+    ctx.save();
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.restore();
+  },
+
+  updateParticles() {
+    for (let i = engine.particles.length - 1; i >= 0; i--) {
+      engine.particles[i].progress += engine.particles[i].speed;
+      if (engine.particles[i].progress >= 1) {
+        engine.particles.splice(i, 1);
+      }
+    }
+  },
+};
+
+// Utility
+function pointToLineDistance(px, py, x1, y1, x2, y2) {
+  const A = px - x1;
+  const B = py - y1;
+  const C = x2 - x1;
+  const D = y2 - y1;
+  const dot = A * C + B * D;
+  const lenSq = C * C + D * D;
+  let param = lenSq !== 0 ? dot / lenSq : -1;
+  param = Math.max(0, Math.min(1, param));
+  const xx = x1 + param * C;
+  const yy = y1 + param * D;
+  return Math.sqrt((px - xx) ** 2 + (py - yy) ** 2);
+}
+
+/* ============================================================
+   CONTEXT MENUS
+   ============================================================ */
+
+function hideContextMenu() {
+  document.getElementById('context-menu').style.display = 'none';
+  document.getElementById('connect-submenu').style.display = 'none';
+}
+
+function showContextMenu(x, y, items) {
+  hideContextMenu();
+  const menu = document.getElementById('context-menu');
+  menu.innerHTML = '';
+  for (const item of items) {
+    if (item.type === 'divider') {
+      const d = document.createElement('div');
+      d.className = 'menu-divider';
+      menu.appendChild(d);
+    } else if (item.type === 'header') {
+      const h = document.createElement('div');
+      h.className = 'menu-header';
+      h.textContent = item.label;
+      menu.appendChild(h);
+    } else {
+      const el = document.createElement('div');
+      el.className = 'menu-item';
+      el.innerHTML = `<span class="icon">${item.icon || ''}</span><span>${item.label}</span>`;
+      el.addEventListener('click', () => { hideContextMenu(); item.action(); });
+      menu.appendChild(el);
+    }
+  }
+  menu.style.display = 'block';
+  menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - menu.offsetHeight - 10) + 'px';
+}
+
+function showNodeContextMenu(x, y, node) {
+  const items = [
+    { type: 'header', label: node.displayName },
+    { icon: '🔗', label: 'Connect to...', action: () => enterConnectionMode(node.id) },
+    { icon: '📋', label: 'Inspect', action: () => engine.openInspector(node.id) },
+    { type: 'divider' },
+    { type: 'header', label: 'Programs' },
+    { icon: '📝', label: 'Open SharedLog', action: () => engine.openProgram(node.id, 'SharedLog') },
+    { icon: '📄', label: 'Open Documents', action: () => engine.openProgram(node.id, 'Documents') },
+  ];
+
+  // If other nodes have programs, offer to join them
+  const existingPrograms = engine.getAllProgramAddresses();
+  for (const [addr, name] of existingPrograms) {
+    if (!node.programs.has(addr)) {
+      items.push({ icon: '🔗', label: `Join ${name}`, action: () => engine.openProgramByAddress(node.id, addr) });
+    }
+  }
+
+  // Program-specific actions
+  for (const [addr, prog] of node.programs) {
+    items.push({ type: 'divider' });
+    items.push({ type: 'header', label: prog.name });
+    if (prog.type === 'Documents') {
+      items.push({ icon: '📥', label: 'Put Document', action: () => {
+        engine.putDocument(node.id, addr, { id: shortHash(), key: 'doc-' + shortHash(), value: 'hello' });
+      }});
+      items.push({ icon: '🗑', label: 'Delete Document', action: () => {
+        engine.deleteDocument(node.id, addr, 'doc-latest');
+      }});
+    }
+    items.push({ icon: '➕', label: 'Append Entry', action: () => {
+      engine.appendEntry(node.id, addr, 'data-' + shortHash());
+    }});
+    items.push({ icon: '❌', label: 'Close Program', action: () => engine.closeProgram(node.id, addr) });
+  }
+
+  // Disconnect / Destroy
+  if (node.connections.size > 0) {
+    items.push({ type: 'divider' });
+    for (const connId of node.connections) {
+      const conn = engine.connections.get(connId);
+      if (conn) {
+        const otherId = conn.fromNodeId === node.id ? conn.toNodeId : conn.fromNodeId;
+        const other = engine.nodes.get(otherId);
+        if (other) {
+          items.push({ icon: '🔌', label: `Disconnect ${other.displayName}`, action: () => engine.removeConnection(connId) });
+        }
+      }
+    }
+  }
+
+  items.push({ type: 'divider' });
+  items.push({ icon: '💀', label: 'Destroy Node', action: () => engine.removeNode(node.id) });
+
+  showContextMenu(x, y, items);
+}
+
+function showConnectionContextMenu(x, y, conn) {
+  const from = engine.nodes.get(conn.fromNodeId);
+  const to = engine.nodes.get(conn.toNodeId);
+  const items = [
+    { type: 'header', label: `${from?.displayName || '?'} ↔ ${to?.displayName || '?'}` },
+    { icon: '🔌', label: 'Disconnect', action: () => engine.removeConnection(conn.id) },
+  ];
+  showContextMenu(x, y, items);
+}
+
+function showCanvasContextMenu(x, y, worldPos) {
+  const items = [
+    { icon: '➕', label: 'Add Node Here', action: () => engine.addNode({ x: worldPos.x, y: worldPos.y }) },
+  ];
+  showContextMenu(x, y, items);
+}
+
+// Connection mode
+function enterConnectionMode(fromNodeId) {
+  engine.connectionMode = { fromNodeId };
+  document.getElementById('connection-mode-indicator').style.display = 'block';
+  canvas.style.cursor = 'crosshair';
+}
+
+function exitConnectionMode() {
+  engine.connectionMode = null;
+  document.getElementById('connection-mode-indicator').style.display = 'none';
+  canvas.style.cursor = 'default';
+}
+
+/* ============================================================
+   INSPECTOR PANELS
+   ============================================================ */
+
+function createInspectorPanel(nodeId) {
+  const node = engine.nodes.get(nodeId);
+  if (!node) return null;
+
+  const panel = document.createElement('div');
+  panel.className = 'inspector-panel';
+  panel.dataset.nodeId = nodeId;
+
+  // Position near node
+  const screenPos = renderer.worldToScreen(node.position.x, node.position.y);
+  panel.style.left = (screenPos.x + 40) + 'px';
+  panel.style.top = Math.max(50, screenPos.y - 100) + 'px';
+
+  const header = document.createElement('div');
+  header.className = 'inspector-header';
+  header.innerHTML = `
+    <span class="node-label" style="color:${node.color}">● ${node.displayName}</span>
+    <button class="close-btn" title="Close">×</button>
+  `;
+  header.querySelector('.close-btn').addEventListener('click', () => engine.closeInspector(nodeId));
+
+  // Dragging
+  let dragging = false, dx = 0, dy = 0;
+  header.addEventListener('mousedown', (e) => {
+    if (e.target.classList.contains('close-btn')) return;
+    dragging = true;
+    dx = e.clientX - panel.offsetLeft;
+    dy = e.clientY - panel.offsetTop;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    panel.style.left = (e.clientX - dx) + 'px';
+    panel.style.top = (e.clientY - dy) + 'px';
+  });
+  document.addEventListener('mouseup', () => { dragging = false; });
+
+  const body = document.createElement('div');
+  body.className = 'inspector-body';
+
+  panel.appendChild(header);
+  panel.appendChild(body);
+  return panel;
+}
+
+function buildNodeStateTree(node) {
+  const state = {
+    peerId: node.peerId,
+    publicKeyHash: node.publicKeyHash,
+    status: node.status,
+    connections: [...node.connections].map(connId => {
+      const c = engine.connections.get(connId);
+      if (!c) return connId;
+      const otherId = c.fromNodeId === node.id ? c.toNodeId : c.fromNodeId;
+      const other = engine.nodes.get(otherId);
+      return {
+        to: other ? other.displayName : otherId,
+        state: c.state,
+        layers: { ...c.layers },
+      };
+    }),
+    pubsub: {
+      subscriptions: [...node.pubsub.subscriptions],
+    },
+    blockStore: {
+      totalSize: node.blockStore.totalSize,
+      blockCount: node.blockStore.blocks.size,
+    },
+    programs: {},
+  };
+
+  for (const [addr, prog] of node.programs) {
+    const progState = {
+      type: prog.type,
+      name: prog.name,
+      closed: prog.closed,
+      topics: prog.topics,
+      sharedLogs: {},
+    };
+    for (const [logId, log] of prog.sharedLogs) {
+      progState.sharedLogs[logId] = {
+        entries: log.entries.size,
+        heads: [...log.heads],
+        ranges: [...log.replicationRanges.values()].map(r => ({
+          offset: +r.offset.toFixed(3),
+          width: +r.width.toFixed(3),
+          mode: r.mode,
+          matured: r.matured,
+          owner: r.publicKeyHash,
+        })),
+        entryList: [...log.entries.values()].map(e => ({
+          hash: e.hash,
+          data: e.data,
+          coord: +e.coordinate.toFixed(3),
+          replicas: e.replicatedBy.size,
+        })),
+      };
+    }
+    state.programs[addr.substring(0, 16) + '...'] = progState;
+  }
+  return state;
+}
+
+function renderInspectorTree(panel, node) {
+  const body = panel.querySelector('.inspector-body');
+  if (!body) return;
+
+  const state = buildNodeStateTree(node);
+  body.innerHTML = '';
+  const tree = renderTreeNode('', state, true);
+  body.appendChild(tree);
+}
+
+function renderTreeNode(key, value, expanded = false, depth = 0) {
+  const container = document.createElement('div');
+  container.className = 'tree-node';
+
+  if (value === null || value === undefined) {
+    const row = document.createElement('div');
+    row.className = 'tree-row';
+    row.innerHTML = `<span class="tree-toggle"></span>${key ? `<span class="tree-key">${key}</span><span class="tree-colon">:</span>` : ''}<span class="tree-value null">${value === null ? 'null' : 'undefined'}</span>`;
+    container.appendChild(row);
+    return container;
+  }
+
+  if (typeof value !== 'object') {
+    const row = document.createElement('div');
+    row.className = 'tree-row';
+    const typeClass = typeof value === 'string' ? 'string' : typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : '';
+    const displayVal = typeof value === 'string' ? `"${value}"` : String(value);
+    row.innerHTML = `<span class="tree-toggle"></span>${key ? `<span class="tree-key">${key}</span><span class="tree-colon">:</span>` : ''}<span class="tree-value ${typeClass}">${escapeHtml(displayVal)}</span>`;
+    container.appendChild(row);
+    return container;
+  }
+
+  const isArray = Array.isArray(value);
+  const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
+  const label = isArray ? `Array(${entries.length})` : `{${entries.length}}`;
+
+  const row = document.createElement('div');
+  row.className = 'tree-row';
+  const toggleChar = expanded ? '▼' : '▶';
+  row.innerHTML = `<span class="tree-toggle">${toggleChar}</span>${key ? `<span class="tree-key">${key}</span><span class="tree-colon">:</span>` : ''}<span class="tree-type">${label}</span>`;
+
+  const children = document.createElement('div');
+  children.className = 'tree-children';
+  children.style.display = expanded ? 'block' : 'none';
+
+  for (const [k, v] of entries) {
+    const childExpanded = depth < 1 && entries.length <= 10;
+    children.appendChild(renderTreeNode(String(k), v, childExpanded, depth + 1));
+  }
+
+  row.querySelector('.tree-toggle').addEventListener('click', () => {
+    const isOpen = children.style.display !== 'none';
+    children.style.display = isOpen ? 'none' : 'block';
+    row.querySelector('.tree-toggle').textContent = isOpen ? '▶' : '▼';
+  });
+
+  container.appendChild(row);
+  container.appendChild(children);
+  return container;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/* ============================================================
+   EVENT SIDEBAR
+   ============================================================ */
+
+function getAffectedNodeIds(details) {
+  const ids = new Set();
+  const keys = ['nodeId', 'fromNodeId', 'toNodeId', 'sourceNodeId', 'targetNodeId', 'nodeIdA', 'nodeIdB'];
+  for (const k of keys) {
+    if (details[k] !== undefined) ids.add(details[k]);
+  }
+  if (details.connectionId !== undefined) {
+    const conn = engine.connections.get(details.connectionId);
+    if (conn) {
+      ids.add(conn.fromNodeId);
+      ids.add(conn.toNodeId);
+    }
+  }
+  return [...ids];
+}
+
+let sidebarUserScrolledUp = false;
+
+(function initSidebarScroll() {
+  // Defer until DOM is ready
+  const setup = () => {
+    const list = document.getElementById('event-list');
+    if (!list) return;
+    list.addEventListener('scroll', () => {
+      const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 30;
+      sidebarUserScrolledUp = !atBottom;
+    });
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
+})();
+
+function addEventToSidebar(evt) {
+  const list = document.getElementById('event-list');
+  if (!list) return;
+
+  const row = document.createElement('div');
+  row.className = 'event-row';
+
+  // Summary line
+  const summary = document.createElement('div');
+  summary.className = 'event-row-summary';
+
+  const dot = document.createElement('span');
+  dot.className = 'event-dot';
+  dot.style.background = evt.color;
+
+  const typeLabel = document.createElement('span');
+  typeLabel.className = 'event-type-label';
+  typeLabel.textContent = evt.type;
+
+  const desc = document.createElement('span');
+  desc.className = 'event-desc';
+  desc.textContent = evt.description;
+
+  summary.appendChild(dot);
+  summary.appendChild(typeLabel);
+  summary.appendChild(desc);
+  row.appendChild(summary);
+
+  // Snapshot container (hidden until expanded)
+  const snapshot = document.createElement('div');
+  snapshot.className = 'event-snapshot';
+
+  if (evt.nodeSnapshots && Object.keys(evt.nodeSnapshots).length > 0) {
+    for (const [nid, state] of Object.entries(evt.nodeSnapshots)) {
+      const node = engine.nodes.get(Number(nid));
+      const label = document.createElement('div');
+      label.className = 'snapshot-node-label';
+      label.style.color = node ? node.color : 'var(--text)';
+      label.textContent = node ? node.displayName : 'Node ' + nid;
+      snapshot.appendChild(label);
+      snapshot.appendChild(renderTreeNode('', state, true));
+    }
+  } else {
+    const noData = document.createElement('div');
+    noData.style.cssText = 'color:var(--text-dim);font-style:italic;padding:4px 0;';
+    noData.textContent = 'No node state captured';
+    snapshot.appendChild(noData);
+  }
+
+  row.appendChild(snapshot);
+
+  // Click to toggle expand
+  row.addEventListener('click', () => {
+    row.classList.toggle('expanded');
+  });
+
+  list.appendChild(row);
+
+  // Auto-scroll to bottom unless user scrolled up
+  if (!sidebarUserScrolledUp) {
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+function clearEventSidebar() {
+  document.getElementById('event-list').innerHTML = '';
+}
+
+function toggleSidebar() {
+  document.body.classList.toggle('sidebar-hidden');
+  renderer.resize();
+}
+
+/* ============================================================
+   TIMELINE
+   ============================================================ */
+
+const timeline = {
+  playing: false,
+  speed: 1,
+  currentIndex: 0,
+  playInterval: null,
+  speeds: [0.5, 1, 2, 5],
+  speedIndex: 1,
+
+  onEventAdded(evt) {
+    const slider = document.getElementById('timeline-slider');
+    slider.max = engine.eventLog.length - 1;
+    slider.value = engine.eventLog.length - 1;
+    this.currentIndex = engine.eventLog.length - 1;
+    this.updateDisplay();
+    this.addEventMarker(evt);
+  },
+
+  updateDisplay() {
+    document.getElementById('event-counter').textContent = `Events: ${this.currentIndex + 1} / ${engine.eventLog.length}`;
+    if (engine.eventLog.length > 0 && this.currentIndex < engine.eventLog.length) {
+      const evt = engine.eventLog[this.currentIndex];
+      document.getElementById('event-description').innerHTML = `<span class="event-type" style="color:${evt.color}">[${evt.type}]</span> ${escapeHtml(evt.description)}`;
+    } else {
+      document.getElementById('event-description').textContent = 'Ready — right-click the canvas to add nodes or use the button above';
+    }
+  },
+
+  addEventMarker(evt) {
+    const markers = document.getElementById('event-markers');
+    const total = Math.max(1, engine.eventLog.length);
+    const marker = document.createElement('div');
+    marker.style.cssText = `position:absolute;width:3px;height:8px;border-radius:1px;background:${evt.color};left:${(evt.id / total * 100)}%;`;
+    markers.appendChild(marker);
+
+    // Limit markers
+    while (markers.children.length > 200) markers.removeChild(markers.firstChild);
+  },
+
+  seekTo(index) {
+    this.currentIndex = Math.max(0, Math.min(engine.eventLog.length - 1, index));
+    document.getElementById('timeline-slider').value = this.currentIndex;
+    this.updateDisplay();
+  },
+
+  togglePlay() {
+    this.playing = !this.playing;
+    document.getElementById('play-btn').textContent = this.playing ? '⏸' : '▶';
+    document.getElementById('play-btn').classList.toggle('active', this.playing);
+    if (this.playing) {
+      this.playInterval = setInterval(() => {
+        if (this.currentIndex < engine.eventLog.length - 1) {
+          this.currentIndex++;
+          document.getElementById('timeline-slider').value = this.currentIndex;
+          this.updateDisplay();
+        } else {
+          this.togglePlay();
+        }
+      }, 500 / this.speed);
+    } else {
+      clearInterval(this.playInterval);
+    }
+  },
+
+  stepForward() {
+    if (this.currentIndex < engine.eventLog.length - 1) {
+      this.seekTo(this.currentIndex + 1);
+    }
+  },
+
+  stepBack() {
+    if (this.currentIndex > 0) {
+      this.seekTo(this.currentIndex - 1);
+    }
+  },
+
+  skipToStart() { this.seekTo(0); },
+  skipToEnd() { this.seekTo(engine.eventLog.length - 1); },
+
+  cycleSpeed() {
+    this.speedIndex = (this.speedIndex + 1) % this.speeds.length;
+    this.speed = this.speeds[this.speedIndex];
+    document.getElementById('speed-display').textContent = this.speed + 'x';
+    if (this.playing) {
+      clearInterval(this.playInterval);
+      this.playInterval = setInterval(() => {
+        if (this.currentIndex < engine.eventLog.length - 1) {
+          this.currentIndex++;
+          document.getElementById('timeline-slider').value = this.currentIndex;
+          this.updateDisplay();
+        } else {
+          this.togglePlay();
+        }
+      }, 500 / this.speed);
+    }
+  },
+
+  reset() {
+    this.playing = false;
+    this.currentIndex = 0;
+    clearInterval(this.playInterval);
+    document.getElementById('play-btn').textContent = '▶';
+    document.getElementById('play-btn').classList.remove('active');
+    document.getElementById('timeline-slider').value = 0;
+    document.getElementById('timeline-slider').max = 0;
+    document.getElementById('event-markers').innerHTML = '';
+    this.updateDisplay();
+  },
+};
+
+/* ============================================================
+   TOASTS
+   ============================================================ */
+
+function showToast(message, color = '#4a9eff') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.style.borderLeftColor = color;
+  toast.style.borderLeft = `3px solid ${color}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+/* ============================================================
+   LAYER TOGGLES
+   ============================================================ */
+
+function toggleLayer(el) {
+  const layer = el.dataset.layer;
+  el.classList.toggle('off');
+  engine.layerVisibility[layer] = !el.classList.contains('off');
+}
+
+/* ============================================================
+   SCENARIOS
+   ============================================================ */
+
+function loadScenario(name) {
+  if (!name) return;
+  engine.reset();
+  document.getElementById('scenario-select').value = '';
+
+  switch (name) {
+    case '3-node-replication':
+      scenario3NodeReplication();
+      break;
+    case 'dynamic-sharding':
+      scenarioDynamicSharding();
+      break;
+    case 'entry-lifecycle':
+      scenarioEntryLifecycle();
+      break;
+  }
+}
+
+function scenario3NodeReplication() {
+  const cx = renderer.width / 2;
+  const cy = renderer.height / 2;
+  const a = engine.addNode({ x: cx - 160, y: cy - 80, name: 'Alice' });
+  const b = engine.addNode({ x: cx + 160, y: cy - 80, name: 'Bob' });
+  const c = engine.addNode({ x: cx, y: cy + 120, name: 'Carol' });
+
+  setTimeout(() => {
+    engine.addConnection(a.id, b.id);
+    engine.addConnection(b.id, c.id);
+    engine.addConnection(a.id, c.id);
+  }, 200);
+
+  setTimeout(() => {
+    const prog = engine.openProgram(a.id, 'SharedLog');
+    setTimeout(() => {
+      engine.openProgramByAddress(b.id, prog.address);
+      engine.openProgramByAddress(c.id, prog.address);
+    }, 300);
+  }, 800);
+
+  setTimeout(() => {
+    engine.appendEntry(a.id, [...engine.nodes.get(a.id).programs.keys()][0], 'Hello from Alice');
+  }, 2000);
+
+  setTimeout(() => {
+    engine.appendEntry(b.id, [...engine.nodes.get(b.id).programs.keys()][0], 'Hello from Bob');
+  }, 3000);
+
+  showToast('Scenario: 3-Node Replication loaded', '#4a9eff');
+}
+
+function scenarioDynamicSharding() {
+  const cx = renderer.width / 2;
+  const cy = renderer.height / 2;
+  const nodes = [];
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(angle) * 180;
+    const y = cy + Math.sin(angle) * 180;
+    nodes.push(engine.addNode({ x, y }));
+  }
+
+  // Connect in a ring + some cross-links
+  setTimeout(() => {
+    for (let i = 0; i < 5; i++) {
+      engine.addConnection(nodes[i].id, nodes[(i + 1) % 5].id);
+    }
+    engine.addConnection(nodes[0].id, nodes[2].id);
+    engine.addConnection(nodes[1].id, nodes[3].id);
+  }, 200);
+
+  // Open same program on all nodes with different ranges
+  setTimeout(() => {
+    const prog = engine.openProgram(nodes[0].id, 'SharedLog');
+    for (let i = 1; i < 5; i++) {
+      setTimeout(() => {
+        engine.openProgramByAddress(nodes[i].id, prog.address);
+      }, i * 200);
+    }
+  }, 800);
+
+  // Append entries
+  setTimeout(() => {
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => {
+        const addr = [...engine.nodes.get(nodes[i].id).programs.keys()][0];
+        if (addr) engine.appendEntry(nodes[i].id, addr, `Entry from ${nodes[i].displayName}`);
+      }, i * 400);
+    }
+  }, 3000);
+
+  showToast('Scenario: Dynamic Sharding loaded', '#4a9eff');
+}
+
+function scenarioEntryLifecycle() {
+  const cx = renderer.width / 2;
+  const cy = renderer.height / 2;
+  const a = engine.addNode({ x: cx - 120, y: cy, name: 'Alice' });
+  const b = engine.addNode({ x: cx + 120, y: cy, name: 'Bob' });
+
+  setTimeout(() => engine.addConnection(a.id, b.id), 200);
+
+  setTimeout(() => {
+    const prog = engine.openProgram(a.id, 'SharedLog');
+    setTimeout(() => engine.openProgramByAddress(b.id, prog.address), 300);
+  }, 600);
+
+  // Append multiple entries to show DAG
+  setTimeout(() => {
+    const addr = [...engine.nodes.get(a.id).programs.keys()][0];
+    if (addr) {
+      engine.appendEntry(a.id, addr, 'First entry');
+      setTimeout(() => engine.appendEntry(a.id, addr, 'Second entry'), 500);
+      setTimeout(() => engine.appendEntry(a.id, addr, 'Third entry'), 1000);
+    }
+  }, 1800);
+
+  showToast('Scenario: Entry Lifecycle loaded', '#4a9eff');
+}
+
+/* ============================================================
+   HELP
+   ============================================================ */
+
+function showHelp() { document.getElementById('help-overlay').classList.add('visible'); }
+function hideHelp() { document.getElementById('help-overlay').classList.remove('visible'); }
+
+/* ============================================================
+   KEYBOARD SHORTCUTS
+   ============================================================ */
+
+document.addEventListener('keydown', (e) => {
+  // Don't capture when typing in inputs
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+  switch (e.key) {
+    case 'n': case 'N':
+      engine.addNode();
+      break;
+    case ' ':
+      e.preventDefault();
+      timeline.togglePlay();
+      break;
+    case 'ArrowLeft':
+      timeline.stepBack();
+      break;
+    case 'ArrowRight':
+      timeline.stepForward();
+      break;
+    case 'Home':
+      timeline.skipToStart();
+      break;
+    case 'End':
+      timeline.skipToEnd();
+      break;
+    case 'e': case 'E':
+      toggleSidebar();
+      break;
+    case '?':
+      const overlay = document.getElementById('help-overlay');
+      overlay.classList.toggle('visible');
+      break;
+    case 'Escape':
+      exitConnectionMode();
+      hideContextMenu();
+      hideHelp();
+      break;
+    case '+': case '=':
+      renderer.transform.k = Math.min(5, renderer.transform.k * 1.2);
+      break;
+    case '-': case '_':
+      renderer.transform.k = Math.max(0.2, renderer.transform.k / 1.2);
+      break;
+  }
+});
+
+// Close context menu on click outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#context-menu') && !e.target.closest('#connect-submenu')) {
+    hideContextMenu();
+  }
+});
+
+/* ============================================================
+   INITIALIZATION
+   ============================================================ */
+
+renderer.init();
+</script>
+</body>
+</html>
