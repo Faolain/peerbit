@@ -275,19 +275,24 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
 .event-row .event-snapshot {
   display: none; margin-top: 6px; padding-top: 6px;
   border-top: 1px solid var(--border); font-size: 11px;
+  overflow-x: auto;
 }
 .event-row.expanded .event-snapshot { display: block; }
 .event-row .snapshot-node-label {
   font-weight: 600; font-size: 11px; margin-bottom: 2px; padding: 2px 0;
 }
+/* Compact tree inside sidebar: reduce padding/indent */
+.event-snapshot .tree-node { padding: 0 2px; }
+.event-snapshot .tree-children { padding-left: 10px; }
+.event-snapshot .tree-row { flex-wrap: wrap; font-size: 10px; }
 .diff-old { color: var(--red); text-decoration: line-through; font-size: 10px; }
 .diff-arrow { color: var(--text-dim); margin: 0 3px; font-size: 10px; }
-.diff-new { color: var(--green); }
+.diff-new { color: var(--green); font-size: 10px; }
 .diff-added .tree-key { color: var(--green); }
 .diff-added .tree-value, .diff-added .tree-type { color: var(--green); }
 .diff-removed .tree-key { color: var(--red); text-decoration: line-through; }
 .diff-removed .tree-value, .diff-removed .tree-type { color: var(--red); text-decoration: line-through; }
-.diff-changed > .tree-row { background: rgba(227,179,65,0.08); }
+.diff-changed > .tree-row { background: rgba(227,179,65,0.08); border-radius: 3px; }
 .diff-no-changes { color: var(--text-dim); font-style: italic; padding: 4px 12px; font-size: 11px; }
 .sidebar-hidden #event-sidebar { display: none; }
 .sidebar-hidden #canvas-container, .sidebar-hidden #timeline-panel { left: 0 !important; }
