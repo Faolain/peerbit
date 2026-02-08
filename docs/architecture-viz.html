@@ -286,7 +286,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
 }
 .event-row .event-type-label {
   color: var(--text-dim); font-size: 10px; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; max-width: 120px;
+  overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; max-width: 40%;
 }
 .event-row .event-desc {
   color: var(--text); font-size: 11px; white-space: nowrap;
@@ -316,8 +316,15 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
 .diff-removed .tree-value, .diff-removed .tree-type { color: var(--red); text-decoration: line-through; }
 .diff-changed > .tree-row { background: rgba(227,179,65,0.08); border-radius: 3px; }
 .diff-no-changes { color: var(--text-dim); font-style: italic; padding: 4px 12px; font-size: 11px; }
-.sidebar-hidden #event-sidebar { display: none; }
+.sidebar-hidden #event-sidebar, .sidebar-hidden #sidebar-resize-handle { display: none; }
 .sidebar-hidden #canvas-container, .sidebar-hidden #timeline-panel { left: 0 !important; }
+#sidebar-resize-handle {
+  position: absolute; top: 44px; bottom: 100px; width: 5px; cursor: col-resize;
+  z-index: 150; background: transparent; transition: background 0.15s;
+}
+#sidebar-resize-handle:hover, #sidebar-resize-handle.dragging {
+  background: var(--accent);
+}
 .event-row.active { border-left: 3px solid var(--orange); background: rgba(255,136,68,0.12); }
 .event-row.active .event-type-label { color: var(--orange); }
 .event-row.active .event-desc { color: var(--text-bright); }
@@ -375,6 +382,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
   </div>
   <div id="event-list"></div>
 </div>
+<div id="sidebar-resize-handle" style="left:280px"></div>
 
 <!-- Canvas -->
 <div id="canvas-container">
@@ -2397,6 +2405,42 @@ function toggleSidebar() {
   document.body.classList.toggle('sidebar-hidden');
   renderer.resize();
 }
+
+/* Sidebar resize drag */
+(function() {
+  const handle = document.getElementById('sidebar-resize-handle');
+  const sidebar = document.getElementById('event-sidebar');
+  const canvas = document.getElementById('canvas-container');
+  const timeline = document.getElementById('timeline-panel');
+  const MIN_W = 160, MAX_W = 600;
+  let dragging = false;
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    let w = Math.max(MIN_W, Math.min(MAX_W, e.clientX));
+    sidebar.style.width = w + 'px';
+    handle.style.left = w + 'px';
+    canvas.style.left = w + 'px';
+    timeline.style.left = w + 'px';
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    renderer.resize();
+  });
+})();
 
 /* ============================================================
    TIMELINE
