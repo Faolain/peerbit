@@ -2463,6 +2463,18 @@ const timeline = {
     this.updateDisplay();
     engine.restoreToEvent(this.currentIndex);
 
+    // Spawn particle for the current event so animations show during playback
+    const evt = engine.eventLog[this.currentIndex];
+    if (evt) {
+      const d = evt.details;
+      if (evt.type === 'replication:entry-replicate' && d.sourceNodeId != null && d.targetNodeId != null) {
+        engine.addParticle(d.sourceNodeId, d.targetNodeId, '#f778ba', 'entry');
+      } else if (evt.type === 'sharedlog:exchange-heads' && d.nodeIdA != null && d.nodeIdB != null) {
+        engine.addParticle(d.nodeIdA, d.nodeIdB, '#e3b341', 'heads');
+        engine.addParticle(d.nodeIdB, d.nodeIdA, '#e3b341', 'heads');
+      }
+    }
+
     // Highlight and expand current event row in sidebar
     const list = document.getElementById('event-list');
     if (list) {
