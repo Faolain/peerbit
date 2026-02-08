@@ -165,6 +165,8 @@ Parallel implementation (Phase 2): `docs/architecture-viz-phase2.html`
 - 2026-02-08: `openProgram()` triggers head exchange against any connection with `conn.state === 'connected'` (set at transport-ready), even when `pubsub`/`blocks` negotiation is not yet complete.
 - 2026-02-08: Connection visualization currently only differentiates `conn.state` (`connecting` vs `connected`) and partially uses `conn.layers.blocks` for alpha; there is no existing connection hover/tooltip system.
 - 2026-02-08: Timeline scrubbing (`timeline.seekTo`) restores snapshots and only re-spawns animations for a small subset of event types; new “leader send” visuals need explicit handling so they show up while stepping/scrubbing.
+- 2026-02-08: In the real code, “pubsub” (`DirectSub`) and “blocks” (`DirectBlock`) are Peerbit implementations registered as libp2p services (they run *over* libp2p connections/streams, but are not libp2p’s gossipsub/bitswap).
+- 2026-02-08: The layer toggle UI benefits from explicitly labeling “libp2p” vs “Peerbit” ownership to avoid confusing Peerbit’s DirectSub/DirectBlock with libp2p gossipsub/bitswap.
 
 ### Ahas
 - 2026-02-08: The cleanest “parallel implementation” is a new HTML file that starts as a copy of `docs/architecture-viz.html`, so Phase 2 changes can iterate without breaking the baseline demo.
@@ -172,6 +174,12 @@ Parallel implementation (Phase 2): `docs/architecture-viz-phase2.html`
 
 ### Answers To Questions
 - 2026-02-08: “Do not edit the existing one” interpreted as: keep `docs/architecture-viz.html` unchanged; implement Phase 2 behaviors in a new `docs/architecture-viz-phase2.html` file.
+- 2026-02-08: Layer ownership (what is Peerbit vs libp2p?):
+  - Transport: libp2p connection + stream mux/encryption (Peerbit uses libp2p underneath)
+  - PubSub: Peerbit `DirectSub` (`packages/transport/pubsub/...`) running over libp2p streams
+  - Blocks: Peerbit `DirectBlock` (`packages/transport/blocks/...`) running over libp2p streams
+  - Entries: Peerbit log entries (`packages/log/...`) stored as content-addressed blocks
+  - Ranges: Peerbit SharedLog replication ranges (`packages/programs/data/shared-log/src/ranges.ts`)
 
 ### Next Steps
 - Done: Create `docs/architecture-viz-phase2.html` by copying the baseline file.

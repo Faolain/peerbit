@@ -53,6 +53,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
 .layer-toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
 .layer-toggle:hover { background: var(--bg-panel-hover); }
 .layer-dot { width: 8px; height: 8px; border-radius: 50%; }
+.layer-pill {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.02);
+  white-space: nowrap;
+}
 .layer-toggle.off .layer-dot { opacity: 0.3; }
 .layer-toggle.off { color: var(--text-dim); }
 
@@ -349,25 +359,30 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
   <span class="title">Peerbit Architecture (Phase 2)</span>
   <button class="action-btn primary" onclick="engine.addNode()" title="Add a new peer node (N)">+ Add Node</button>
   <div class="separator"></div>
-  <div class="layer-toggle" data-layer="transport" onclick="toggleLayer(this)">
+  <div class="layer-toggle" data-layer="transport" onclick="toggleLayer(this)" title="Transport layer (libp2p connections + stream mux/encryption/transports)">
     <span class="layer-dot" style="background:var(--accent)"></span>
     <span>Transport</span>
+    <span class="layer-pill">libp2p</span>
   </div>
-  <div class="layer-toggle" data-layer="pubsub" onclick="toggleLayer(this)">
+  <div class="layer-toggle" data-layer="pubsub" onclick="toggleLayer(this)" title="PubSub layer (Peerbit DirectSub over libp2p streams)">
     <span class="layer-dot" style="background:var(--green)"></span>
     <span>PubSub</span>
+    <span class="layer-pill">Peerbit</span>
   </div>
-  <div class="layer-toggle" data-layer="blocks" onclick="toggleLayer(this)">
+  <div class="layer-toggle" data-layer="blocks" onclick="toggleLayer(this)" title="Blocks layer (Peerbit DirectBlock over libp2p streams)">
     <span class="layer-dot" style="background:var(--orange)"></span>
     <span>Blocks</span>
+    <span class="layer-pill">Peerbit</span>
   </div>
-  <div class="layer-toggle" data-layer="ranges" onclick="toggleLayer(this)">
+  <div class="layer-toggle" data-layer="ranges" onclick="toggleLayer(this)" title="Ranges layer (Peerbit SharedLog replication ranges)">
     <span class="layer-dot" style="background:var(--purple)"></span>
     <span>Ranges</span>
+    <span class="layer-pill">Peerbit</span>
   </div>
-  <div class="layer-toggle" data-layer="entries" onclick="toggleLayer(this)">
+  <div class="layer-toggle" data-layer="entries" onclick="toggleLayer(this)" title="Entries layer (Peerbit Log/SharedLog entries)">
     <span class="layer-dot" style="background:var(--yellow)"></span>
     <span>Entries</span>
+    <span class="layer-pill">Peerbit</span>
   </div>
   <div class="separator"></div>
   <select id="scenario-select" onchange="loadScenario(this.value)">
@@ -462,11 +477,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--fon
     </ul>
     <h3>Architecture Layers</h3>
     <ul>
-      <li><b style="color:var(--accent)">Transport</b> — libp2p connections (TCP/WS/WebRTC)</li>
-      <li><b style="color:var(--green)">PubSub</b> — DirectSub topic subscriptions & messages</li>
-      <li><b style="color:var(--orange)">Blocks</b> — DirectBlock content-addressed storage</li>
-      <li><b style="color:var(--purple)">Ranges</b> — Replication range assignments (0..1 circular space)</li>
-      <li><b style="color:var(--yellow)">Entries</b> — Log entries with DAG structure</li>
+      <li><b style="color:var(--accent)">Transport</b> — libp2p connections + streams (mux/encryption/transports)</li>
+      <li><b style="color:var(--green)">PubSub</b> — Peerbit DirectSub (over libp2p streams)</li>
+      <li><b style="color:var(--orange)">Blocks</b> — Peerbit DirectBlock (over libp2p streams)</li>
+      <li><b style="color:var(--purple)">Ranges</b> — Peerbit SharedLog replication ranges (circular coordinate space)</li>
+      <li><b style="color:var(--yellow)">Entries</b> — Peerbit Log/SharedLog entries (DAG, stored via Blocks)</li>
     </ul>
     <h3>Peerbit Data Flow</h3>
     <p>When peers connect: Transport → PubSub/Blocks negotiate in parallel → (both ready) Exchange heads.</p>
