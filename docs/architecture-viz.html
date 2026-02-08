@@ -2710,10 +2710,111 @@ document.addEventListener('click', (e) => {
 });
 
 /* ============================================================
+   LOCAL STORAGE PERSISTENCE
+   ============================================================ */
+
+const STORAGE_KEY = 'peerbit-viz-state';
+
+function saveToLocalStorage() {
+  try {
+    const data = JSON.stringify({
+      eventLog: engine.eventLog,
+      stateHistory: engine.stateHistory,
+      currentIndex: timeline.currentIndex,
+    });
+    localStorage.setItem(STORAGE_KEY, data);
+  } catch (e) {
+    // Quota exceeded or other error — silently ignore
+  }
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data.eventLog || !data.stateHistory || data.eventLog.length === 0) return false;
+
+    // Restore the final state snapshot to get nodes/connections/counters
+    const lastSnap = JSON.parse(data.stateHistory[data.stateHistory.length - 1], mapReviver);
+    engine.nodes = new Map(lastSnap.nodesData);
+    engine.connections = new Map(lastSnap.connectionsData);
+    nextNodeId = lastSnap.counters.nextNodeId;
+    nextConnId = lastSnap.counters.nextConnId;
+    nextProgramId = lastSnap.counters.nextProgramId;
+    nextEntryId = lastSnap.counters.nextEntryId;
+
+    engine.eventLog = data.eventLog;
+    engine.stateHistory = data.stateHistory;
+
+    // Rebuild previousSnapshots from current nodes
+    engine.previousSnapshots.clear();
+    for (const [nid, node] of engine.nodes) {
+      engine.previousSnapshots.set(nid, buildNodeStateTree(node));
+    }
+
+    // Rebuild sidebar
+    document.getElementById('event-list').innerHTML = '';
+    for (const evt of engine.eventLog) {
+      addEventToSidebar(evt);
+    }
+
+    // Set up timeline
+    const slider = document.getElementById('timeline-slider');
+    slider.max = engine.eventLog.length - 1;
+    const idx = Math.min(data.currentIndex || engine.eventLog.length - 1, engine.eventLog.length - 1);
+    timeline.currentIndex = idx;
+    slider.value = idx;
+    timeline.updateDisplay();
+    timeline.rebuildEventMarkers();
+
+    // Restore to the saved timeline position
+    engine.restoreToEvent(idx);
+
+    renderer.updateForceLayout();
+    showToast('Restored previous session', '#4a9eff');
+    return true;
+  } catch (e) {
+    console.warn('Failed to restore from localStorage:', e);
+    localStorage.removeItem(STORAGE_KEY);
+    return false;
+  }
+}
+
+function clearSavedState() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+// Debounced auto-save after each event
+let _saveTimer = null;
+function scheduleSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveToLocalStorage, 500);
+}
+
+// Hook into pushEvent — save after each event
+const _origPushEvent = engine.pushEvent.bind(engine);
+engine.pushEvent = function(evt) {
+  _origPushEvent(evt);
+  scheduleSave();
+};
+
+// Clear saved state on reset (new scenario or manual reset)
+const _origReset = engine.reset.bind(engine);
+engine.reset = function() {
+  _origReset();
+  clearSavedState();
+};
+
+// Save on page unload
+window.addEventListener('beforeunload', saveToLocalStorage);
+
+/* ============================================================
    INITIALIZATION
    ============================================================ */
 
 renderer.init();
+loadFromLocalStorage();
 </script>
 </body>
 </html>
