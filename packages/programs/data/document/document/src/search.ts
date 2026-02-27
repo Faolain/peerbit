@@ -289,6 +289,7 @@ type QueryDetailedOptions<
 		response: types.AbstractSearchResult,
 		from: PublicSignKey,
 	) => void | Promise<void>;
+	onMissingResponses?: (error: MissingResponsesError) => void | Promise<void>;
 	remote?: {
 		from?: string[]; // if specified, only query these peers
 	};
@@ -1338,7 +1339,23 @@ export class DocumentIndex<
 				);
 			}
 			this.clearAllResultQueues();
-			await this.index?.stop?.();
+			await this._resumableIterators.clearAll();
+			if (this.iteratorKeepAliveTimers) {
+				for (const timer of this.iteratorKeepAliveTimers.values()) {
+					clearTimeout(timer);
+				}
+				this.iteratorKeepAliveTimers.clear();
+			}
+			try {
+				await this.index?.stop?.();
+			} catch (error) {
+				// Be defensive during teardown: stopping an already-stopped index shouldn't
+				// prevent closing the program and releasing timers/iterators.
+				if (error instanceof indexerTypes.NotStartedError) {
+					return closed;
+				}
+				throw error;
+			}
 		}
 		return closed;
 	}
@@ -1351,8 +1368,27 @@ export class DocumentIndex<
 				this.handleDocumentChange,
 			);
 			this.clearAllResultQueues();
-			await this.index?.drop?.();
-			await this.index?.stop?.();
+			await this._resumableIterators.clearAll();
+			if (this.iteratorKeepAliveTimers) {
+				for (const timer of this.iteratorKeepAliveTimers.values()) {
+					clearTimeout(timer);
+				}
+				this.iteratorKeepAliveTimers.clear();
+			}
+			try {
+				await this.index?.drop?.();
+			} catch (error) {
+				if (!(error instanceof indexerTypes.NotStartedError)) {
+					throw error;
+				}
+			}
+			try {
+				await this.index?.stop?.();
+			} catch (error) {
+				if (!(error instanceof indexerTypes.NotStartedError)) {
+					throw error;
+				}
+			}
 		}
 		return dropped;
 	}
@@ -1367,17 +1403,24 @@ export class DocumentIndex<
 		options?: Options,
 	): Promise<WithContext<I>>;
 
-	public async get<
-		Options extends GetOptions<T, I, D, Resolve>,
-		Resolve extends boolean | undefined = ExtractResolveFromOptions<Options>,
-	>(key: indexerTypes.Ideable | indexerTypes.IdKey, options?: Options) {
-		let deferred:
-			| DeferredPromise<WithIndexedContext<T, I> | WithContext<I>>
-			| undefined;
+		public async get<
+			Options extends GetOptions<T, I, D, Resolve>,
+			Resolve extends boolean | undefined = ExtractResolveFromOptions<Options>,
+		>(key: indexerTypes.Ideable | indexerTypes.IdKey, options?: Options) {
+			let deferred:
+				| DeferredPromise<WithIndexedContext<T, I> | WithContext<I>>
+				| undefined;
+			let baseRemote:
+				| RemoteQueryOptions<
+						types.AbstractSearchRequest,
+						types.AbstractSearchResult,
+						D
+				  >
+				| undefined;
 
-		// Normalize the id key early so listeners can use it
-		let idKey =
-			key instanceof indexerTypes.IdKey ? key : indexerTypes.toId(key);
+			// Normalize the id key early so listeners can use it
+			let idKey =
+				key instanceof indexerTypes.IdKey ? key : indexerTypes.toId(key);
 
 		if (options?.waitFor) {
 			// add change listener before query because we might get a concurrent change that matches the query,
@@ -1410,16 +1453,16 @@ export class DocumentIndex<
 
 			let timeout = setTimeout(resolveUndefined, options.waitFor);
 			this.events.addEventListener("close", resolveUndefined);
-			this.documentEvents.addEventListener("change", listener);
-			deferred.promise.then(cleanup);
+				this.documentEvents.addEventListener("change", listener);
+				deferred.promise.then(cleanup);
 
-			// Prepare remote options without mutating caller options
-			const baseRemote =
-				options?.remote === false
-					? undefined
-					: typeof options?.remote === "object"
-						? { ...options.remote }
-						: {};
+				// Prepare remote options without mutating caller options
+				baseRemote =
+					options?.remote === false
+						? undefined
+						: typeof options?.remote === "object"
+							? { ...options.remote }
+							: {};
 			if (baseRemote) {
 				const waitPolicy = baseRemote.wait;
 				if (
@@ -1455,16 +1498,20 @@ export class DocumentIndex<
 							deferred!.resolve(first.value as any);
 						}
 					},
-				});
+					});
+				}
 			}
-		}
 
-		const result = (await this.getDetailed(idKey, options))?.[0]?.results[0];
+			const initialOptions = baseRemote
+				? ({ ...(options as any), remote: baseRemote } as Options)
+				: options;
+			const result =
+				(await this.getDetailed(idKey, initialOptions))?.[0]?.results[0];
 
-		// if no results, and we have remote joining options, we wait for the timout and if there are joining peers we re-query
-		if (!result) {
-			return deferred?.promise;
-		} else if (deferred) {
+			// if no results, and we have remote joining options, we wait for the timout and if there are joining peers we re-query
+			if (!result) {
+				return deferred?.promise;
+			} else if (deferred) {
 			deferred.resolve(undefined);
 		}
 		return result?.value;
@@ -1855,24 +1902,26 @@ export class DocumentIndex<
 			const resolveFlag = resolvesDocuments(
 				(fromQuery || query) as AnyIterationRequest,
 			);
-			prevQueued = {
-				from,
-				queue: [],
-				timeout: setTimeout(() => {
-					this._resultQueue.delete(query.idString);
-				}, 6e4),
-				keptInIndex: kept,
-				fromQuery: (fromQuery || query) as
-					| types.SearchRequest
-					| types.SearchRequestIndexed
-					| types.IterationRequest,
-				resolveResults: resolveFlag,
-			};
-			if (
-				fromQuery instanceof types.IterationRequest &&
-				fromQuery.pushUpdates
-			) {
-				prevQueued.pushMode = fromQuery.pushUpdates;
+				prevQueued = {
+					from,
+					queue: [],
+					timeout: setTimeout(() => {
+						this._resultQueue.delete(query.idString);
+					}, 6e4),
+					keptInIndex: kept,
+					fromQuery: (fromQuery || query) as
+						| types.SearchRequest
+						| types.SearchRequestIndexed
+						| types.IterationRequest,
+					resolveResults: resolveFlag,
+				};
+				// Don't keep Node alive just to GC old remote iterator state.
+				prevQueued.timeout.unref?.();
+				if (
+					fromQuery instanceof types.IterationRequest &&
+					fromQuery.pushUpdates
+				) {
+					prevQueued.pushMode = fromQuery.pushUpdates;
 			}
 			this._resultQueue.set(query.idString, prevQueued);
 		}
@@ -1970,17 +2019,19 @@ export class DocumentIndex<
 				string,
 				ReturnType<typeof setTimeout>
 			>());
-		const timer = setTimeout(() => {
-			timers.delete(idString);
-			const queued = this._resultQueue.get(idString);
-			if (queued) {
-				clearTimeout(queued.timeout);
-				this._resultQueue.delete(idString);
-			}
-			this._resumableIterators.close({ idString });
-		}, delay);
-		timers.set(idString, timer);
-	}
+			const timer = setTimeout(() => {
+				timers.delete(idString);
+				const queued = this._resultQueue.get(idString);
+				if (queued) {
+					clearTimeout(queued.timeout);
+					this._resultQueue.delete(idString);
+				}
+				this._resumableIterators.close({ idString });
+			}, delay);
+			// This is a best-effort cleanup timer; it should not keep Node alive.
+			timer.unref?.();
+			timers.set(idString, timer);
+		}
 
 	private cancelIteratorKeepAlive(idString: string) {
 		const timers = this.iteratorKeepAliveTimers;
@@ -2213,29 +2264,34 @@ export class DocumentIndex<
 		queryRequest: R,
 		options?: QueryDetailedOptions<T, I, D, boolean | undefined>,
 		fetchFirstForRemote?: Set<string>,
-	): Promise<types.Results<RT>[]> {
-		const local = typeof options?.local === "boolean" ? options?.local : true;
-		let remote:
-			| RemoteQueryOptions<
-					types.AbstractSearchRequest,
-					types.AbstractSearchResult,
-					D
-			  >
-			| undefined = undefined;
-		if (typeof options?.remote === "boolean") {
-			if (options?.remote) {
-				remote = {};
+		): Promise<types.Results<RT>[]> {
+			const local = typeof options?.local === "boolean" ? options?.local : true;
+			let remote:
+				| RemoteQueryOptions<
+						types.AbstractSearchRequest,
+						types.AbstractSearchResult,
+						D
+				  >
+				| undefined = undefined;
+			if (typeof options?.remote === "boolean") {
+				remote = options.remote ? {} : undefined;
 			} else {
-				remote = undefined;
+				remote = options?.remote || {};
 			}
-		} else {
-			remote = options?.remote || {};
-		}
 		if (remote && remote.priority == null) {
 			// give queries higher priority than other "normal" data activities
 			// without this, we might have a scenario that a peer joina  network with large amount of data to be synced, but can not query anything before that is done
 			// this will lead to bad UX as you usually want to list/expore whats going on before doing any replication work
 			remote.priority = 2;
+		}
+		if (remote && remote.timeout == null && options?.remote) {
+			const waitPolicy =
+				typeof options.remote === "object" ? options.remote.wait : undefined;
+			const waitTimeout =
+				typeof waitPolicy === "object" ? waitPolicy.timeout : undefined;
+			if (waitTimeout != null) {
+				remote.timeout = waitTimeout;
+			}
 		}
 
 		if (!local && !remote) {
@@ -2266,19 +2322,76 @@ export class DocumentIndex<
 				throw new Error("Unexpected");
 			}
 
-			const replicatorGroups = options?.remote?.from
-				? options?.remote?.from
-				: await this._log.getCover(remote.domain ?? { args: undefined }, {
-						roleAge: remote.minAge,
-						eager: remote.reach?.eager,
-						reachableOnly: !!remote.wait, // when we want to merge joining we can ignore pending to be online peers and instead consider them once they become online
-						signal: options?.signal,
-					});
+				const coverProps = remote.domain ?? { args: undefined };
+				const isDefaultDomainArgs =
+					!("range" in coverProps) &&
+					(!("args" in coverProps) || (coverProps as any).args == null);
 
-			if (replicatorGroups) {
-				const responseHandler = async (
-					results: {
-						response: types.AbstractSearchResult;
+				let replicatorGroups = options?.remote?.from
+					? options?.remote?.from
+					: await this._log.getCover(coverProps, {
+							roleAge: remote.minAge,
+							eager: remote.reach?.eager,
+							reachableOnly: !!remote.wait, // when we want to merge joining we can ignore pending to be online peers and instead consider them once they become online
+							signal: options?.signal,
+						});
+
+					// Cold start: cover can be temporarily empty/self-only while replication metadata
+					// converges. For remote search, it's sometimes better to at least try currently
+					// connected peers, but only if we have evidence that a remote replicator exists.
+					if (!options?.remote?.from && isDefaultDomainArgs) {
+						const selfHash = this.node.identity.publicKey.hashcode();
+						const remoteCount = replicatorGroups.filter((h) => h !== selfHash).length;
+						if (remoteCount === 0) {
+							const waitEnabled = Boolean(remote.wait);
+							const coverIsSelfOnly =
+								replicatorGroups.length === 1 && replicatorGroups[0] === selfHash;
+
+							// If the cover is explicitly empty (no shards), don't override it unless
+							// the caller requested waiting for joins (e.g. get(waitFor)).
+							if (!waitEnabled && !coverIsSelfOnly) {
+								// no-op
+							} else {
+							let hasKnownRemoteReplicator = false;
+							if (!waitEnabled) {
+								try {
+									const replicators = await this._log.getReplicators();
+									for (const hash of replicators.keys()) {
+										if (hash !== selfHash) {
+											hasKnownRemoteReplicator = true;
+											break;
+										}
+									}
+								} catch {
+									// Best-effort only.
+								}
+							}
+
+							if (waitEnabled || hasKnownRemoteReplicator) {
+								const peerMap: Map<string, unknown> | undefined = (this.node.services
+									.pubsub as any)?.peers;
+								if (peerMap?.keys) {
+									const extra: string[] = [];
+									for (const hash of peerMap.keys()) {
+										if (!hash || hash === selfHash) continue;
+										extra.push(hash);
+										if (extra.length >= 8) break;
+									}
+									if (extra.length > 0) {
+										replicatorGroups = [
+											...new Set([...replicatorGroups, ...extra]),
+										];
+									}
+								}
+							}
+						}
+						}
+					}
+
+				if (replicatorGroups) {
+					const responseHandler = async (
+						results: {
+							response: types.AbstractSearchResult;
 						from?: PublicSignKey;
 					}[],
 				) => {
@@ -2403,6 +2516,9 @@ export class DocumentIndex<
 				} catch (error) {
 					if (error instanceof MissingResponsesError) {
 						warn("Did not reciveve responses from all shard");
+						if (options?.onMissingResponses) {
+							await options.onMissingResponses(error);
+						}
 						if (remote?.throwOnMissing) {
 							throw error;
 						}
@@ -2464,18 +2580,17 @@ export class DocumentIndex<
 		options?: O,
 	): Promise<ValueTypeFromRequest<Resolve, T, I>[]> {
 		// Set fetch to search size, or max value (default to max u32 (4294967295))
-		const coercedRequest = coerceQuery(
-			queryRequest,
-			options,
-			this.compatibility,
-		);
-		coercedRequest.fetch = coercedRequest.fetch ?? 0xffffffff;
+			const coercedRequest = coerceQuery(
+				queryRequest,
+				options,
+				this.compatibility,
+			);
+			coercedRequest.fetch = coercedRequest.fetch ?? 0xffffffff;
 
-		// So that the iterator is pre-fetching the right amount of entries
-		const iterator = this.iterate<Resolve>(coercedRequest, options);
+			// Use an iterator so large results respect message size limits.
+			const iterator = this.iterate<Resolve>(coercedRequest, options);
 
-		// So that this call will not do any remote requests
-		const allResults: ValueTypeFromRequest<Resolve, T, I>[] = [];
+			const allResults: ValueTypeFromRequest<Resolve, T, I>[] = [];
 
 		while (
 			iterator.done() !== true &&
@@ -2876,37 +2991,43 @@ export class DocumentIndex<
 
 		if (typeof options?.remote === "object") {
 			let waitForTime: number | undefined = undefined;
+			const waitPolicy =
+				typeof options.remote.wait === "object"
+					? options.remote.wait
+					: undefined;
+			const waitBehavior: WaitBehavior = waitPolicy?.behavior ?? "keep-open";
 			if (options.remote.wait) {
-				let t0 = +new Date();
-
 				waitForTime =
 					typeof options.remote.wait === "boolean"
 						? DEFAULT_TIMEOUT
 						: (options.remote.wait.timeout ?? DEFAULT_TIMEOUT);
-				let setDoneIfTimeout = false;
-				maybeSetDone = () => {
-					if (t0 + waitForTime! < +new Date()) {
-						cleanup();
-						done = true;
-					} else {
-						setDoneIfTimeout = true;
-					}
-				};
-				unsetDone = () => {
-					setDoneIfTimeout = false;
-					done = false;
-				};
-				let timeout = setTimeout(() => {
-					if (setDoneIfTimeout) {
-						cleanup();
-						done = true;
-					}
-				}, waitForTime);
+				if (waitBehavior === "keep-open") {
+					let t0 = +new Date();
+					let setDoneIfTimeout = false;
+					maybeSetDone = () => {
+						if (t0 + waitForTime! < +new Date()) {
+							cleanup();
+							done = true;
+						} else {
+							setDoneIfTimeout = true;
+						}
+					};
+					unsetDone = () => {
+						setDoneIfTimeout = false;
+						done = false;
+					};
+					let timeout = setTimeout(() => {
+						if (setDoneIfTimeout) {
+							cleanup();
+							done = true;
+						}
+					}, waitForTime);
 
-				cleanup = () => {
-					this.clearResultsQueue(queryRequestCoerced);
-					clearTimeout(timeout);
-				};
+					cleanup = () => {
+						this.clearResultsQueue(queryRequestCoerced);
+						clearTimeout(timeout);
+					};
+				}
 			}
 
 			if (options.remote.reach?.discover) {
@@ -2933,10 +3054,6 @@ export class DocumentIndex<
 				options.remote.reach.eager = true; // include the results from the discovered peer even if it is not mature
 			}
 
-			const waitPolicy =
-				typeof options.remote.wait === "object"
-					? options.remote.wait
-					: undefined;
 			if (
 				waitPolicy?.behavior === "block" &&
 				(waitPolicy.until ?? "any") === "any"
@@ -2961,6 +3078,7 @@ export class DocumentIndex<
 		): Promise<boolean> => {
 			await warmupPromise;
 			let hasMore = false;
+			let missingResponses = false;
 			const discoverTargets =
 				typeof options?.remote === "object"
 					? options.remote.reach?.discover
@@ -3096,10 +3214,38 @@ export class DocumentIndex<
 							);
 						}
 					},
+					onMissingResponses: (error) => {
+						missingResponses = true;
+						const missingGroups = (error as MissingResponsesError & {
+							missingGroups?: string[][];
+						}).missingGroups;
+						if (!missingGroups?.length) {
+							return;
+						}
+
+						const selfHash = this.node.identity.publicKey.hashcode();
+						for (const group of missingGroups) {
+							const target = group.find((hash) => {
+								if (!hash || hash === selfHash) return false;
+								const attempts = missingResponseRetryAttempts.get(hash) ?? 0;
+								return attempts < maxMissingResponseRetryAttempts;
+							});
+							if (!target) continue;
+							pendingMissingResponseRetryPeers.add(target);
+							missingResponseRetryAttempts.set(
+								target,
+								(missingResponseRetryAttempts.get(target) ?? 0) + 1,
+							);
+						}
+					},
 				},
 				fetchOptions?.fetchedFirstForRemote,
 			);
 
+			if (missingResponses) {
+				hasMore = true;
+				unsetDone();
+			}
 			if (!hasMore) {
 				maybeSetDone();
 			}
@@ -3123,6 +3269,17 @@ export class DocumentIndex<
 			if (!first) {
 				first = true;
 				fetchPromise = fetchFirst(n);
+				return fetchPromise;
+			}
+
+			if (pendingMissingResponseRetryPeers.size > 0) {
+				const retryTargets = [...pendingMissingResponseRetryPeers];
+				pendingMissingResponseRetryPeers.clear();
+				fetchPromise = fetchFirst(n, {
+					from: retryTargets,
+					// retries for missing groups should not be suppressed by first-fetch dedupe
+					fetchedFirstForRemote: undefined,
+				});
 				return fetchPromise;
 			}
 
@@ -3533,32 +3690,27 @@ export class DocumentIndex<
 			done = true;
 		};
 
-		let close = async () => {
-			cleanupAndDone();
+			let close = async () => {
+				cleanupAndDone();
 
-			// send close to remote
-			const closeRequest = new types.CloseIteratorRequest({
-				id: queryRequestCoerced.id,
-			});
-			const promises: Promise<any>[] = [];
-
-			for (const [peer, buffer] of peerBufferMap) {
-				if (buffer.kept === 0) {
-					peerBufferMap.delete(peer);
-					continue;
-				}
-				if (peer !== this.node.identity.publicKey.hashcode()) {
-					// Close remote
-					promises.push(
+				// send close to remote (only peers that actually served results / had an active buffer)
+				const closeRequest = new types.CloseIteratorRequest({
+					id: queryRequestCoerced.id,
+				});
+				const selfHash = this.node.identity.publicKey.hashcode();
+				const remotePeers = [...peerBufferMap.entries()]
+					.filter(([peer, buffer]) => peer !== selfHash && buffer.kept > 0)
+					.map(([peer]) => peer);
+				peerBufferMap.clear();
+				await Promise.allSettled(
+					remotePeers.map((peer) =>
 						this._query.send(closeRequest, {
 							...options,
 							mode: new SilentDelivery({ to: [peer], redundancy: 1 }),
 						}),
-					);
-				}
-			}
-			await Promise.all(promises);
-		};
+					),
+				);
+			};
 		options?.signal && options.signal.addEventListener("abort", close);
 
 		let doneFn = () => {
@@ -3568,6 +3720,9 @@ export class DocumentIndex<
 		let joinListener: (() => void) | undefined;
 
 		let fetchedFirstForRemote: Set<string> | undefined = undefined;
+		const pendingMissingResponseRetryPeers = new Set<string>();
+		const missingResponseRetryAttempts = new Map<string, number>();
+		const maxMissingResponseRetryAttempts = 2;
 
 		let updateDeferred: ReturnType<typeof pDefer> | undefined;
 		const onLateResultsQueue =
@@ -4144,13 +4299,24 @@ export class DocumentIndex<
 			};
 		}
 
-		if (typeof options?.remote === "object" && options?.remote.wait) {
+		const remoteConfig =
+			options && typeof options.remote === "object" ? options.remote : undefined;
+		const remoteWaitPolicy =
+			remoteConfig && typeof remoteConfig.wait === "object"
+				? remoteConfig.wait
+				: undefined;
+		const remoteWaitBehavior: WaitBehavior =
+			remoteWaitPolicy?.behavior ?? "keep-open";
+		const keepRemoteWaitOpen =
+			!!remoteConfig?.wait &&
+			remoteWaitBehavior === "keep-open";
+
+		if (keepRemoteWaitOpen) {
 			// was used to account for missed results when a peer joins; omitted in this minimal handler
 
 			updateDeferred = pDefer<void>();
 
-			const waitForTime =
-				typeof options.remote.wait === "object" && options.remote.wait.timeout;
+			const waitForTime = remoteWaitPolicy?.timeout;
 
 			const prevMaybeSetDone = maybeSetDone;
 			maybeSetDone = () => {
@@ -4167,7 +4333,7 @@ export class DocumentIndex<
 			fetchedFirstForRemote = new Set<string>();
 			joinListener = this.createReplicatorJoinListener({
 				signal: ensureController().signal,
-				eager: options.remote.reach?.eager,
+				eager: remoteConfig?.reach?.eager,
 				onPeer: async (pk) => {
 					if (done) return;
 					const hash = pk.hashcode();
@@ -4240,8 +4406,7 @@ export class DocumentIndex<
 				}
 			};
 		}
-		const remoteWaitActive =
-			typeof options?.remote === "object" && !!options.remote.wait;
+		const remoteWaitActive = keepRemoteWaitOpen;
 
 		const waitForUpdateAndResetDeferred = async () => {
 			if (remoteWaitActive) {
