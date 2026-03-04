@@ -1,5 +1,50 @@
 # Changelog
 
+## [2.0.0](https://github.com/Faolain/peerbit/compare/react-v1.0.1...react-v2.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* canonical open DX improvements ([90d77b6](https://github.com/Faolain/peerbit/commit/90d77b6d9efc1cc502b5ac0948ecabf62692f46f))
+* canonical open DX improvements ([75e08ab](https://github.com/Faolain/peerbit/commit/75e08abd47e77041e483340317285612363426fe))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+
+
+### Bug Fixes
+
+* add keep ([1172e22](https://github.com/Faolain/peerbit/commit/1172e22324a4b5f7b88227a4f2c6f3137a7fae1b))
+* add logger dependency ([af7a47d](https://github.com/Faolain/peerbit/commit/af7a47d82ecefea82f5778558cec7e17e4632817))
+* force libsodium 0.7.15 tmp ([663c997](https://github.com/Faolain/peerbit/commit/663c997100237cebcfc28bd782cd4057ab22e8d6))
+* make sure sqlite3 is initialized from /peerbit/sqlite/ ([a230c4a](https://github.com/Faolain/peerbit/commit/a230c4a6d5389c358b8abd1edef82ca490fa22a1))
+* missing events deps ([f0be11a](https://github.com/Faolain/peerbit/commit/f0be11a0ca26a48aa3991f686e1ca36660e6cb09))
+* **peerbit-react:** create peers with privateKey ([b9df5b3](https://github.com/Faolain/peerbit/commit/b9df5b31c36f0537a4ef8bf24042e22a7d575e78))
+* prevent users from passing peerId in favor of privateKey on client construction (libp2p v3 compat.) ([19a0baf](https://github.com/Faolain/peerbit/commit/19a0baff70271818ce01b03b81f1de1b5f3b5546))
+* re-export @peerbit/program-react in @peerbit/react ([aa152a9](https://github.com/Faolain/peerbit/commit/aa152a9d83a3221baec1905bd519ecafd48fd980))
+* refactor sqlite3 module loading to prevent concurrent initializations ([6605c73](https://github.com/Faolain/peerbit/commit/6605c73a486768f920fbb54fbf8e80a539d2e4cf))
+* remove events dependency ([0b7b06d](https://github.com/Faolain/peerbit/commit/0b7b06d30b62987f3bb43119fd87e16a930aa08a))
+* rename react package to peerbit-react ([3a4553b](https://github.com/Faolain/peerbit/commit/3a4553bd4d921722d70f0ee1082946ee11cb4e5b))
+* use @peerbit/logger ([226b00f](https://github.com/Faolain/peerbit/commit/226b00fc5ca334ac2b1cc91643072244588a9480))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.2.0
+    * @peerbit/program-react bumped to 0.5.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/crypto bumped to 4.0.0
+    * @peerbit/program bumped to 7.0.0
+    * @peerbit/indexer-interface bumped to 4.0.0
+    * peerbit bumped to 6.0.0
+  * devDependencies
+    * @peerbit/time bumped to 4.0.0
+
 ## [1.0.1](https://github.com/dao-xyz/peerbit/compare/react-v1.0.0...react-v1.0.1) (2026-03-04)
 
 

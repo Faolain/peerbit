@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.0.0](https://github.com/Faolain/peerbit/compare/shared-log-proxy-v2.0.1...shared-log-proxy-v3.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.2.0
+    * @peerbit/canonical-host bumped to 1.1.0
+    * @peerbit/crypto bumped to 4.0.0
+    * @peerbit/indexer-interface bumped to 4.0.0
+    * @peerbit/log bumped to 7.0.0
+    * @peerbit/program bumped to 7.0.0
+    * @peerbit/shared-log bumped to 14.0.0
+
 ## [2.0.1](https://github.com/dao-xyz/peerbit/compare/shared-log-proxy-v2.0.0...shared-log-proxy-v2.0.1) (2026-03-04)
 
 

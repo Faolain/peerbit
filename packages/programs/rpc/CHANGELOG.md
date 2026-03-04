@@ -417,6 +417,44 @@
   * devDependencies
     * @peerbit/test-utils bumped from ^2.0.32 to ^2.0.33
 
+## [7.0.0](https://github.com/Faolain/peerbit/compare/rpc-v6.0.1...rpc-v7.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* **rpc:** expose missing response groups on timeout ([#604](https://github.com/Faolain/peerbit/issues/604)) ([0e16a6e](https://github.com/Faolain/peerbit/commit/0e16a6e73f383d366fead6c105d2215a897933c4))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* improved waitFor api to handle ([967dd46](https://github.com/Faolain/peerbit/commit/967dd46c77f18f2830b0e50813ad974da044b985))
+* pnpm package manager ([a6e95de](https://github.com/Faolain/peerbit/commit/a6e95de9a4fb418acd73f68639bec66fe6747856))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* **rpc:** prevent unhandled rejection in responseInterceptor ([bbf27fa](https://github.com/Faolain/peerbit/commit/bbf27fa3860ed1b2d83ae4fd8bfb60bb23a9f31a))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 4.0.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/program bumped to 7.0.0
+    * @peerbit/time bumped to 4.0.0
+    * @peerbit/pubsub bumped to 6.0.0
+    * @peerbit/pubsub-interface bumped to 6.0.0
+    * @peerbit/stream-interface bumped to 7.0.0
+  * devDependencies
+    * @peerbit/test-utils bumped to 4.0.0
+
 ## [6.0.1](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.0...rpc-v6.0.1) (2026-03-04)
 
 
