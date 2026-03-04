@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.0.0](https://github.com/Faolain/peerbit/compare/time-v3.0.0...time-v4.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
 ## [3.0.0](https://github.com/dao-xyz/peerbit/compare/time-v2.3.0...time-v3.0.0) (2026-03-04)
 
 

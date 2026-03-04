@@ -202,6 +202,52 @@
     * @peerbit/pubsub-interface bumped from ^3.0.2 to ^3.0.3
     * @peerbit/any-store bumped from ^2.0.1 to ^2.0.2
 
+## [7.0.0](https://github.com/Faolain/peerbit/compare/program-v6.0.0...program-v7.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* **peerbit:** define dial readiness semantics for fanout ([#613](https://github.com/Faolain/peerbit/issues/613)) ([c485a73](https://github.com/Faolain/peerbit/commit/c485a737fd037ee4c12ba99f1d47560c5993da70))
+* support for cross package instanceOf Program checks ([9b6bccb](https://github.com/Faolain/peerbit/commit/9b6bccbcbcb908eaf8e3434e93c5590236192b72))
+
+
+### Bug Fixes
+
+* correctly handle concurrent subprogram openings ([a49f37b](https://github.com/Faolain/peerbit/commit/a49f37b9f31f62395c4e3ac60dd952b73a649be0))
+* fmt ([5c54079](https://github.com/Faolain/peerbit/commit/5c54079ced7f315b33b09fd85bbfa44677d0df2b))
+* program version reset ([5543e03](https://github.com/Faolain/peerbit/commit/5543e03a819f6034ddfd3713b3a1c95a0f87e4e5))
+* **program:** cleanup waitFor cancellation ([01ab157](https://github.com/Faolain/peerbit/commit/01ab157858dc5fab43f4d1d4b27ecd27f16aaa38))
+* **program:** handle existing reuse/replace for address opens ([88b12bb](https://github.com/Faolain/peerbit/commit/88b12bb97eb068bef59e6fc827c6bc12b5712053))
+* **shared-log:** harden rebalance repair under churn ([42e98ce](https://github.com/Faolain/peerbit/commit/42e98ce55439678bd7dce42efd51ef4b6d97eddb))
+* **shared-log:** stabilize repair retries and fanout/test CI ([012387d](https://github.com/Faolain/peerbit/commit/012387df987ab0117cdb6fe6b8e43a47d4ae4d6a))
+* use libp2p based logger ([5ffd22b](https://github.com/Faolain/peerbit/commit/5ffd22b2ddcfcc133fe025fcfb399461ef2fe266))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 4.0.0
+    * @peerbit/keychain bumped to 1.3.0
+    * @peerbit/blocks-interface bumped to 3.0.0
+    * @peerbit/pubsub-interface bumped to 6.0.0
+    * @peerbit/any-store-interface bumped to 1.2.0
+    * @peerbit/libp2p-test-utils bumped to 4.0.0
+    * @peerbit/indexer-interface bumped to 4.0.0
+    * @peerbit/stream-interface bumped to 7.0.0
+    * @peerbit/time bumped to 4.0.0
+    * @peerbit/logger bumped to 3.0.0
+    * @peerbit/blocks bumped to 5.0.0
+    * @peerbit/pubsub bumped to 6.0.0
+
 ## [6.0.0](https://github.com/dao-xyz/peerbit/compare/program-v5.6.3...program-v6.0.0) (2026-03-04)
 
 

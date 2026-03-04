@@ -1,5 +1,38 @@
 # Changelog
 
+## [3.0.0](https://github.com/Faolain/peerbit/compare/document-proxy-v2.0.1...document-proxy-v3.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* **canonical:** add proxy packages and e2e suites ([ad5b802](https://github.com/Faolain/peerbit/commit/ad5b802fd57546cc1757852d449e7616e32ff097))
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+
+
+### Bug Fixes
+
+* **document:** align DocumentsLike.count return types ([61c6690](https://github.com/Faolain/peerbit/commit/61c66907404b9b5402b0fafca58bd0fb69dd61c8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.2.0
+    * @peerbit/canonical-host bumped to 1.1.0
+    * @peerbit/document bumped to 14.0.0
+    * @peerbit/document-interface bumped to 4.0.0
+    * @peerbit/indexer-interface bumped to 4.0.0
+    * @peerbit/program bumped to 7.0.0
+    * @peerbit/shared-log-proxy bumped to 3.0.0
+    * @peerbit/stream-interface bumped to 7.0.0
+  * devDependencies
+    * @peerbit/crypto bumped to 4.0.0
+
 ## [2.0.1](https://github.com/dao-xyz/peerbit/compare/document-proxy-v2.0.0...document-proxy-v2.0.1) (2026-03-04)
 
 
