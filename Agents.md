@@ -32,4 +32,5 @@ pnpm run release:rc
 
 These scripts forward to aegir with the pnpm publish command, so no additional flags are required.
 
-
+General Instructions
+- For any code exploration spawn subagents for the task
