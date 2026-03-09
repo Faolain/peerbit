@@ -1,6 +1,6 @@
 {
 	"name": "@peerbit/clock-service",
-	"version": "3.2.25",
+	"version": "3.2.32",
 	"description": "Clock signing",
 	"type": "module",
 	"sideEffects": false,
@@ -53,7 +53,8 @@
 		"clean": "aegir clean",
 		"build": "aegir build --no-bundle",
 		"test": "aegir test -t node",
-		"lint": "aegir lint"
+		"lint": "aegir lint",
+		"test:cov": "aegir test -t node --cov"
 	},
 	"author": "dao.xyz",
 	"license": "MIT",

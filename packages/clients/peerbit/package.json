@@ -1,6 +1,6 @@
 {
 	"name": "peerbit",
-	"version": "5.0.1",
+	"version": "5.0.7",
 	"description": "Peerbit client",
 	"author": "dao.xyz",
 	"license": "MIT",
@@ -111,7 +111,8 @@
 		"test": "aegir test",
 		"test:browser": "aegir clean && aegir test -t browser",
 		"test:node": "aegir clean && aegir test -t node",
-		"lint": "aegir lint"
+		"lint": "aegir lint",
+		"test:cov": "aegir test -t node --cov"
 	},
 	"localMaintainers": [
 		"dao.xyz"

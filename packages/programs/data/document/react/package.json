@@ -1,6 +1,6 @@
 {
 	"name": "@peerbit/document-react",
-	"version": "1.0.1",
+	"version": "1.0.8",
 	"description": "React hooks for @peerbit/document",
 	"sideEffects": false,
 	"type": "module",
@@ -42,7 +42,8 @@
 		"build": "aegir build --no-bundle",
 		"test": "pnpm run test:dom",
 		"test:dom": "vitest run --project dom",
-		"lint": "aegir lint"
+		"lint": "aegir lint",
+		"test:cov": "vitest run --project dom --coverage"
 	},
 	"peerDependencies": {
 		"react": "^18.0.0 || ^19.0.0"

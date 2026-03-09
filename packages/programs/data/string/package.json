@@ -1,6 +1,6 @@
 {
 	"name": "@peerbit/string",
-	"version": "5.1.24",
+	"version": "5.1.31",
 	"description": "String store",
 	"sideEffects": false,
 	"type": "module",
@@ -53,7 +53,8 @@
 		"clean": "aegir clean",
 		"build": "aegir build --no-bundle",
 		"test": "aegir test -t node",
-		"lint": "aegir lint"
+		"lint": "aegir lint",
+		"test:cov": "aegir test -t node --cov"
 	},
 	"author": "dao.xyz",
 	"license": "MIT",
