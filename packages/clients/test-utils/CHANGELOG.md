@@ -400,6 +400,46 @@
   * dependencies
     * peerbit bumped from 4.0.6 to 4.0.7
 
+## [4.0.0](https://github.com/Faolain/peerbit/compare/test-utils-v3.0.1...test-utils-v4.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+* make keychain libp2p compatible ([00aecf1](https://github.com/Faolain/peerbit/commit/00aecf1be807368b11800948cbc92ca03f8eb5c4))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([38c7cb2](https://github.com/Faolain/peerbit/commit/38c7cb28183835a49ffe648d55e25a3951534143))
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* **test-utils:** reconnect peers after restart ([f992df6](https://github.com/Faolain/peerbit/commit/f992df64197fd8533fc4ed87ef1f626c4b8ca0bc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/any-store bumped to 2.3.0
+    * @peerbit/crypto bumped to 4.0.0
+    * @peerbit/indexer-interface bumped to 4.0.0
+    * @peerbit/libp2p-test-utils bumped to 4.0.0
+    * peerbit bumped to 6.0.0
+    * @peerbit/blocks bumped to 5.0.0
+    * @peerbit/keychain bumped to 1.3.0
+    * @peerbit/program bumped to 7.0.0
+    * @peerbit/pubsub bumped to 6.0.0
+    * @peerbit/stream bumped to 6.0.0
+  * devDependencies
+    * @peerbit/time bumped to 4.0.0
+
 ## [3.0.1](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.0...test-utils-v3.0.1) (2026-03-04)
 
 

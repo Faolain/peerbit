@@ -108,6 +108,39 @@
     * @peerbit/crypto bumped from 2.1.7 to 2.2.0
     * @peerbit/stream-interface bumped from ^5.0.1 to ^5.0.2
 
+## [6.0.0](https://github.com/Faolain/peerbit/compare/pubsub-interface-v5.0.0...pubsub-interface-v6.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* add react tests ([42b3923](https://github.com/Faolain/peerbit/commit/42b3923c4ff551a691ab2e2c1e605a84ec55d059))
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+* **pubsub:** add typed unsubscribe reason metadata ([280983c](https://github.com/Faolain/peerbit/commit/280983c37da68590740de7c142adf01db04f8d71))
+* **pubsub:** add typed unsubscribe reasons ([82ac0a1](https://github.com/Faolain/peerbit/commit/82ac0a1c5e3174d745517bb908e79009342a2497))
+* **transport:** unify directstream and fanout route hints ([#614](https://github.com/Faolain/peerbit/issues/614)) ([4783d05](https://github.com/Faolain/peerbit/commit/4783d057edb7122426d63b323d2bd35195f36416))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+* **shared-log:** harden rebalance repair under churn ([42e98ce](https://github.com/Faolain/peerbit/commit/42e98ce55439678bd7dce42efd51ef4b6d97eddb))
+* **shared-log:** stabilize repair retries and fanout/test CI ([012387d](https://github.com/Faolain/peerbit/commit/012387df987ab0117cdb6fe6b8e43a47d4ae4d6a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 4.0.0
+    * @peerbit/stream-interface bumped to 7.0.0
+
 ## [5.0.0](https://github.com/dao-xyz/peerbit/compare/pubsub-interface-v4.1.2...pubsub-interface-v5.0.0) (2026-03-04)
 
 

@@ -194,6 +194,35 @@
     * @peerbit/crypto bumped from 2.1.7 to 2.2.0
     * @peerbit/stream-interface bumped from ^5.0.1 to ^5.0.2
 
+## [3.0.0](https://github.com/Faolain/peerbit/compare/blocks-interface-v2.0.0...blocks-interface-v3.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+* handle missing deps ([1249ff6](https://github.com/Faolain/peerbit/commit/1249ff601602d274c3c4bd81ed811667288d3985))
+* restore deps versions ([5d6b35a](https://github.com/Faolain/peerbit/commit/5d6b35a01a08f87bd17ad63eacb70b4b8a44b1db))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 4.0.0
+    * @peerbit/stream-interface bumped to 7.0.0
+  * devDependencies
+    * @peerbit/libp2p-test-utils bumped to 4.0.0
+
 ## [2.0.0](https://github.com/dao-xyz/peerbit/compare/blocks-interface-v1.5.2...blocks-interface-v2.0.0) (2026-03-04)
 
 

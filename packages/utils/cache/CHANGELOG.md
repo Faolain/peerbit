@@ -1,5 +1,29 @@
 # Changelog
 
+## [4.0.0](https://github.com/Faolain/peerbit/compare/cache-v3.0.0...cache-v4.0.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582))
+
+### Features
+
+* fanout tree protocol + large-network sims + interactive sandbox ([#582](https://github.com/Faolain/peerbit/issues/582)) ([3f16953](https://github.com/Faolain/peerbit/commit/3f16953f1048e6f6dda7229fb30de6d3e7e0476b))
+* migrate to borsh 6 and Typescript Stage 3 decorators ([86caba4](https://github.com/Faolain/peerbit/commit/86caba4f2128d3b1e2d274bea1b537722b5ec1c7))
+
+
+### Bug Fixes
+
+* add missing deps ([cf45de8](https://github.com/Faolain/peerbit/commit/cf45de831c5e0d3d1d97441a9e952537cd708f58))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @peerbit/time bumped to 4.0.0
+
 ## [3.0.0](https://github.com/dao-xyz/peerbit/compare/cache-v2.2.0...cache-v3.0.0) (2026-03-04)
 
 
