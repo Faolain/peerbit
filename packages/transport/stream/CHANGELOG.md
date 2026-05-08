@@ -43,6 +43,97 @@
   * dependencies
     * @peerbit/stream-interface bumped from ^4.0.0 to ^5.0.0
 
+## [5.0.16](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.15...stream-v5.0.16) (2026-05-05)
+
+
+### Bug Fixes
+
+* prevent stream priority stalls under backpressure ([c0a7308](https://github.com/dao-xyz/peerbit/commit/c0a7308237573f6128de99c2a12eb1ee07a84ba5))
+* prevent stream priority stalls under backpressure ([679da82](https://github.com/dao-xyz/peerbit/commit/679da820e712a4ef9f9791b9cc98379ad0417b02))
+
+
+### Documentation
+
+* **stream:** clarify priority peek decode fallback ([0d38b80](https://github.com/dao-xyz/peerbit/commit/0d38b80c4959526ff21ef1ca5d6749e43750b5ec))
+
+## [5.0.15](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.14...stream-v5.0.15) (2026-05-04)
+
+
+### Bug Fixes
+
+* **rpc:** bound requests during slow publish ([743644a](https://github.com/dao-xyz/peerbit/commit/743644a727d25c5c935104cdde8369d2aa09845a))
+* **rpc:** bound requests during slow publish ([beaec62](https://github.com/dao-xyz/peerbit/commit/beaec624304042384cb341247445acfeeadd5fd6))
+
+## [5.0.14](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.13...stream-v5.0.14) (2026-05-03)
+
+
+### Bug Fixes
+
+* **stream:** handle internal delivery rejections ([058d2dc](https://github.com/dao-xyz/peerbit/commit/058d2dcc8e04a0a51306fb96c461cb9f407d8720))
+
+## [5.0.13](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.12...stream-v5.0.13) (2026-05-02)
+
+
+### Bug Fixes
+
+* stabilize file-share large transfer paths ([#762](https://github.com/dao-xyz/peerbit/issues/762)) ([66116f4](https://github.com/dao-xyz/peerbit/commit/66116f432279f4ed5e9b32abab041fa89ad3e22e))
+
+## [5.0.12](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.11...stream-v5.0.12) (2026-05-01)
+
+
+### Bug Fixes
+
+* **stream:** stabilize delivery error identity ([2d32ba7](https://github.com/dao-xyz/peerbit/commit/2d32ba7c388e7dda5ee4eec10bc776bca45fba31))
+* **stream:** stabilize delivery error identity ([e65fbb2](https://github.com/dao-xyz/peerbit/commit/e65fbb2b9be00fa14393d3c39bd4a4e6ac62349a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/stream-interface bumped to 6.0.9
+
+## [5.0.11](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.10...stream-v5.0.11) (2026-04-30)
+
+
+### Bug Fixes
+
+* **stream:** materialize list-like message payloads ([#749](https://github.com/dao-xyz/peerbit/issues/749)) ([2464485](https://github.com/dao-xyz/peerbit/commit/246448591b7437c4597ae712cdce0eb00eff20dc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/stream-interface bumped to 6.0.8
+
+## [5.0.10](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.9...stream-v5.0.10) (2026-04-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @peerbit/libp2p-test-utils bumped to 3.0.5
+
+## [5.0.9](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.8...stream-v5.0.9) (2026-03-30)
+
+
+### Bug Fixes
+
+* **packages:** normalize npm metadata for released modules ([#702](https://github.com/dao-xyz/peerbit/issues/702)) ([bc77b1d](https://github.com/dao-xyz/peerbit/commit/bc77b1d196f86d3783050903e85bef720d703cf2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 3.1.1
+    * @peerbit/logger bumped to 2.0.1
+    * @peerbit/stream-interface bumped to 6.0.7
+  * devDependencies
+    * @peerbit/libp2p-test-utils bumped to 3.0.4
+
 ## [5.0.8](https://github.com/dao-xyz/peerbit/compare/stream-v5.0.7...stream-v5.0.8) (2026-03-27)
 
 

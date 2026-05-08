@@ -400,6 +400,188 @@
   * dependencies
     * peerbit bumped from 4.0.6 to 4.0.7
 
+## [3.0.33](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.32...test-utils-v3.0.33) (2026-05-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.8
+    * @peerbit/program bumped to 6.0.29
+    * @peerbit/pubsub bumped to 5.2.10
+    * @peerbit/stream bumped to 5.0.16
+    * peerbit bumped to 5.2.18
+
+## [3.0.32](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.31...test-utils-v3.0.32) (2026-05-04)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.7
+    * @peerbit/program bumped to 6.0.28
+    * @peerbit/pubsub bumped to 5.2.9
+    * @peerbit/stream bumped to 5.0.15
+    * peerbit bumped to 5.2.17
+
+## [3.0.31](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.30...test-utils-v3.0.31) (2026-05-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.6
+    * @peerbit/program bumped to 6.0.27
+    * @peerbit/pubsub bumped to 5.2.8
+    * @peerbit/stream bumped to 5.0.14
+    * peerbit bumped to 5.2.16
+
+## [3.0.30](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.29...test-utils-v3.0.30) (2026-05-02)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.5
+    * @peerbit/program bumped to 6.0.26
+    * @peerbit/pubsub bumped to 5.2.7
+    * @peerbit/stream bumped to 5.0.13
+    * peerbit bumped to 5.2.15
+
+## [3.0.29](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.28...test-utils-v3.0.29) (2026-05-01)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.4
+    * @peerbit/program bumped to 6.0.25
+    * @peerbit/pubsub bumped to 5.2.6
+    * @peerbit/stream bumped to 5.0.12
+    * peerbit bumped to 5.2.14
+
+## [3.0.28](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.27...test-utils-v3.0.28) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.24
+    * @peerbit/pubsub bumped to 5.2.5
+    * peerbit bumped to 5.2.13
+
+## [3.0.27](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.26...test-utils-v3.0.27) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.23
+    * @peerbit/pubsub bumped to 5.2.4
+    * peerbit bumped to 5.2.12
+
+## [3.0.26](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.25...test-utils-v3.0.26) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.3
+    * @peerbit/program bumped to 6.0.22
+    * @peerbit/pubsub bumped to 5.2.3
+    * @peerbit/stream bumped to 5.0.11
+    * peerbit bumped to 5.2.11
+
+## [3.0.25](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.24...test-utils-v3.0.25) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.21
+    * @peerbit/pubsub bumped to 5.2.2
+    * peerbit bumped to 5.2.10
+
+## [3.0.24](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.23...test-utils-v3.0.24) (2026-04-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.2
+    * @peerbit/libp2p-test-utils bumped to 3.0.5
+    * @peerbit/program bumped to 6.0.20
+    * @peerbit/pubsub bumped to 5.2.1
+    * @peerbit/stream bumped to 5.0.10
+    * peerbit bumped to 5.2.9
+
+## [3.0.23](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.22...test-utils-v3.0.23) (2026-04-28)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.1
+    * @peerbit/program bumped to 6.0.19
+    * peerbit bumped to 5.2.8
+
+## [3.0.22](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.21...test-utils-v3.0.22) (2026-04-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.0
+    * @peerbit/program bumped to 6.0.18
+    * @peerbit/pubsub bumped to 5.2.0
+    * peerbit bumped to 5.2.7
+
+## [3.0.21](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.20...test-utils-v3.0.21) (2026-04-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.17
+    * @peerbit/pubsub bumped to 5.1.6
+    * peerbit bumped to 5.2.6
+
+## [3.0.20](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.19...test-utils-v3.0.20) (2026-03-30)
+
+
+### Bug Fixes
+
+* **packages:** normalize npm metadata for released modules ([#702](https://github.com/dao-xyz/peerbit/issues/702)) ([bc77b1d](https://github.com/dao-xyz/peerbit/commit/bc77b1d196f86d3783050903e85bef720d703cf2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/any-store bumped to 2.2.9
+    * @peerbit/blocks bumped to 4.0.11
+    * @peerbit/crypto bumped to 3.1.1
+    * @peerbit/indexer-interface bumped to 3.0.3
+    * @peerbit/keychain bumped to 1.2.9
+    * @peerbit/libp2p-test-utils bumped to 3.0.4
+    * @peerbit/program bumped to 6.0.16
+    * @peerbit/pubsub bumped to 5.1.5
+    * @peerbit/stream bumped to 5.0.9
+    * peerbit bumped to 5.2.5
+
 ## [3.0.19](https://github.com/dao-xyz/peerbit/compare/test-utils-v3.0.18...test-utils-v3.0.19) (2026-03-29)
 
 

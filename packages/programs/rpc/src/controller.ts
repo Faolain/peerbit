@@ -27,7 +27,6 @@ import {
 	type RequestTransportContext,
 	SilentDelivery,
 	type WithExtraSigners,
-	deliveryModeHasReceiver,
 } from "@peerbit/stream-interface";
 import { AbortError, TimeoutError } from "@peerbit/time";
 import pDefer, { type DeferredPromise } from "p-defer";
@@ -64,6 +63,19 @@ const createValueResolver = <T>(
 	} else {
 		return (decrypted) => decrypted.getValue(type as AbstractType<T>);
 	}
+};
+
+const getExpectedResponders = (
+	mode: PubSubPublishOptions["mode"] | undefined,
+): Set<string> | undefined => {
+	const to = (mode as { to?: unknown } | undefined)?.to;
+	if (!Array.isArray(to) || to.length === 0) {
+		return undefined;
+	}
+	const responders = to.filter(
+		(value): value is string => typeof value === "string",
+	);
+	return responders.length > 0 ? new Set(responders) : undefined;
 };
 
 export type ResponseEvent<R> = {
@@ -341,6 +353,18 @@ export class RPC<Q, R> extends Program<RPCSetupOptions<Q, R>, RPCEvents<Q, R>> {
 		expectedResponders?: Set<string>,
 		options?: RPCRequestOptions<R>,
 	) {
+		const expectedResponseHash =
+			expectedResponders && response.from
+				? response.from.hashcode()
+				: undefined;
+		if (
+			expectedResponseHash &&
+			expectedResponders.has(expectedResponseHash) &&
+			responders.has(expectedResponseHash)
+		) {
+			return;
+		}
+
 		this.events.dispatchEvent(
 			new CustomEvent("response", {
 				detail: response,
@@ -442,38 +466,46 @@ export class RPC<Q, R> extends Program<RPCSetupOptions<Q, R>, RPCEvents<Q, R>> {
 		const allResults: RPCResponse<R>[] = [];
 
 		const deferredPromise = pDefer<void>();
+		const publishAbortController = new AbortController();
+		const abortPublish = (reason: unknown) => {
+			if (!publishAbortController.signal.aborted) {
+				publishAbortController.abort(reason);
+			}
+		};
 
 		if (this.closed) {
 			throw new AbortError("Closed");
 		}
 		const timeoutFn = setTimeout(
 			() => {
+				abortPublish(new AbortError("RPC request timeout"));
 				deferredPromise.resolve();
 			},
 			options?.timeout || 10 * 1000,
 		);
 
 		const abortListener = (err: Event) => {
-			deferredPromise.reject(
-				(err.target as any)?.["reason"] || new AbortError(),
-			);
+			const reason = (err.target as any)?.["reason"] || new AbortError();
+			abortPublish(reason);
+			deferredPromise.reject(reason);
 		};
 		options?.signal?.addEventListener("abort", abortListener);
 
 		const closeListener = () => {
-			deferredPromise.reject(new AbortError("Closed"));
+			const reason = new AbortError("Closed");
+			abortPublish(reason);
+			deferredPromise.reject(reason);
 		};
 		const dropListener = () => {
-			deferredPromise.reject(new AbortError("Dropped"));
+			const reason = new AbortError("Dropped");
+			abortPublish(reason);
+			deferredPromise.reject(reason);
 		};
 
 		this.events.addEventListener("close", closeListener);
 		this.events.addEventListener("drop", dropListener);
 
-		const expectedResponders =
-			options?.mode && deliveryModeHasReceiver(options.mode)
-				? new Set(options.mode.to)
-				: undefined;
+		const expectedResponders = getExpectedResponders(options?.mode);
 
 		const responders = new Set<string>();
 
@@ -489,17 +521,13 @@ export class RPC<Q, R> extends Program<RPCSetupOptions<Q, R>, RPCEvents<Q, R>> {
 			options,
 		);
 		this._responseResolver.set(id, responseHandler);
-		let publishSignal: AbortSignal | undefined = undefined;
-		let publishAbortReason: unknown | undefined = undefined;
+		void deferredPromise.promise
+			.finally(() => {
+				abortPublish(new AbortError("Resolved early"));
+			})
+			.catch(() => {});
+
 		if (options?.responseInterceptor) {
-			const abortController = new AbortController();
-			void deferredPromise.promise
-				.finally(() => {
-					publishAbortReason = new AbortError("Resolved early");
-					abortController.abort(publishAbortReason);
-				})
-				.catch(() => {});
-			publishSignal = abortController.signal;
 			options.responseInterceptor((response: RPCResponse<R>) => {
 				return this.handleDecodedResponse(
 					response,
@@ -513,25 +541,38 @@ export class RPC<Q, R> extends Program<RPCSetupOptions<Q, R>, RPCEvents<Q, R>> {
 		}
 
 		try {
-			await this.node.services.pubsub.publish(
-				requestBytes,
-				this.getPublishOptions(messageId, options, publishSignal),
-			);
+			const publishPromise = Promise.resolve(
+				this.node.services.pubsub.publish(
+					requestBytes,
+					this.getPublishOptions(
+						messageId,
+						options,
+						publishAbortController.signal,
+					),
+				),
+			)
+				.catch((error: any) => {
+					if (
+						publishAbortController.signal.aborted &&
+						(error instanceof AbortError ||
+							error === publishAbortController.signal.reason)
+					) {
+						return;
+					}
+					if (error instanceof TimeoutError) {
+						// Ignore publish timeouts
+						return;
+					}
+					throw error;
+				});
+			await Promise.race([publishPromise, deferredPromise.promise]);
 			await deferredPromise.promise;
 		} catch (error: any) {
-			if (error instanceof TimeoutError) {
-				// Ignore publish timeouts
-			} else if (
-				publishAbortReason &&
-				(error === publishAbortReason ||
-					(error instanceof AbortError &&
-						error.message === (publishAbortReason as AbortError).message))
-			) {
-				// Response interceptor resolved early; canceling publish is expected
-			} else {
+			if (!(error instanceof TimeoutError)) {
 				throw error;
 			}
 		} finally {
+			abortPublish(new AbortError("RPC request finished"));
 			clearTimeout(timeoutFn);
 			this.events.removeEventListener("close", closeListener);
 			this.events.removeEventListener("drop", dropListener);

@@ -50,6 +50,12 @@ import MostCommonQueryPredictor, {
 import { type Operation, isPutOperation } from "./operation.js";
 import { Prefetch } from "./prefetch.js";
 import type { ExtractArgs } from "./program.js";
+import {
+	initializeResultType,
+	isResultIndexedValue,
+	isResultValue,
+	isResults,
+} from "./result-shape.js";
 import { ResumableIterators } from "./resumable-iterator.js";
 
 const WARNING_WHEN_ITERATING_FOR_MORE_THAN = 1e5;
@@ -411,19 +417,20 @@ const introduceEntries = async <
 			logger.error("Missing from for response");
 		}
 
-		if (response.response instanceof types.Results) {
+		if (isResults(response.response)) {
 			response.response.results.forEach((r) =>
-				r instanceof types.ResultValue
-					? r.init(documentType)
-					: r.init(indexedType),
+				initializeResultType(r, documentType, indexedType),
 			);
 			if (typeof options?.remote !== "boolean" && options?.remote?.replicate) {
 				const uniqueResults = response.response.results.filter((result) => {
+					const resultWithContext = result as
+						| types.ResultValue<T>
+						| types.ResultIndexedValue<I>;
 					const head =
-						result instanceof types.ResultIndexedValue &&
-						result.entries.length > 0
-							? result.entries[0]!.hash
-							: result.context.head;
+						isResultIndexedValue(resultWithContext) &&
+						resultWithContext.entries.length > 0
+							? resultWithContext.entries[0]!.hash
+							: resultWithContext.context.head;
 					if (replicatedHeads.has(head)) {
 						return false;
 					}
@@ -1491,24 +1498,24 @@ export class DocumentIndex<
 		options?: Options,
 	): Promise<WithContext<I>>;
 
-		public async get<
-			Options extends GetOptions<T, I, D, Resolve>,
-			Resolve extends boolean | undefined = ExtractResolveFromOptions<Options>,
-		>(key: indexerTypes.Ideable | indexerTypes.IdKey, options?: Options) {
-			let deferred:
-				| DeferredPromise<WithIndexedContext<T, I> | WithContext<I>>
-				| undefined;
-			let baseRemote:
-				| RemoteQueryOptions<
-						types.AbstractSearchRequest,
-						types.AbstractSearchResult,
-						D
-				  >
-				| undefined;
+	public async get<
+		Options extends GetOptions<T, I, D, Resolve>,
+		Resolve extends boolean | undefined = ExtractResolveFromOptions<Options>,
+	>(key: indexerTypes.Ideable | indexerTypes.IdKey, options?: Options) {
+		let deferred:
+			| DeferredPromise<WithIndexedContext<T, I> | WithContext<I>>
+			| undefined;
+		let baseRemote:
+			| RemoteQueryOptions<
+					types.AbstractSearchRequest,
+					types.AbstractSearchResult,
+					D
+			  >
+			| undefined;
 
-			// Normalize the id key early so listeners can use it
-			let idKey =
-				key instanceof indexerTypes.IdKey ? key : indexerTypes.toId(key);
+		// Normalize the id key early so listeners can use it
+		let idKey =
+			key instanceof indexerTypes.IdKey ? key : indexerTypes.toId(key);
 
 		if (options?.waitFor) {
 			// add change listener before query because we might get a concurrent change that matches the query,
@@ -1541,16 +1548,16 @@ export class DocumentIndex<
 
 			let timeout = setTimeout(resolveUndefined, options.waitFor);
 			this.events.addEventListener("close", resolveUndefined);
-				this.documentEvents.addEventListener("change", listener);
-				deferred.promise.then(cleanup);
+			this.documentEvents.addEventListener("change", listener);
+			deferred.promise.then(cleanup);
 
-				// Prepare remote options without mutating caller options
-				baseRemote =
-					options?.remote === false
-						? undefined
-						: typeof options?.remote === "object"
-							? { ...options.remote }
-							: {};
+			// Prepare remote options without mutating caller options
+			baseRemote =
+				options?.remote === false
+					? undefined
+					: typeof options?.remote === "object"
+						? { ...options.remote }
+						: {};
 			if (baseRemote) {
 				const waitPolicy = baseRemote.wait;
 				if (
@@ -1586,20 +1593,20 @@ export class DocumentIndex<
 							deferred!.resolve(first.value as any);
 						}
 					},
-					});
-				}
+				});
 			}
+		}
 
-			const initialOptions = baseRemote
-				? ({ ...(options as any), remote: baseRemote } as Options)
-				: options;
-			const result =
-				(await this.getDetailed(idKey, initialOptions))?.[0]?.results[0];
+		const initialOptions = baseRemote
+			? ({ ...(options as any), remote: baseRemote } as Options)
+			: options;
+		const result = (await this.getDetailed(idKey, initialOptions))?.[0]
+			?.results[0];
 
-			// if no results, and we have remote joining options, we wait for the timout and if there are joining peers we re-query
-			if (!result) {
-				return deferred?.promise;
-			} else if (deferred) {
+		// if no results, and we have remote joining options, we wait for the timout and if there are joining peers we re-query
+		if (!result) {
+			return deferred?.promise;
+		} else if (deferred) {
 			deferred.resolve(undefined);
 		}
 		return result?.value;
@@ -1681,7 +1688,14 @@ export class DocumentIndex<
 
 		coerceWithContext(value, context);
 
-		await this.index.put(wrappedValueToIndex, undefined, options);
+		try {
+			await this.index.put(wrappedValueToIndex, undefined, options);
+		} catch (error) {
+			if (error instanceof indexerTypes.NotStartedError && this.closed) {
+				return { context, indexable: valueToIndex };
+			}
+			throw error;
+		}
 		return { context, indexable: valueToIndex };
 	}
 
@@ -1749,6 +1763,19 @@ export class DocumentIndex<
 		let requestClazz = resolve
 			? types.SearchRequest
 			: types.SearchRequestIndexed;
+		const wantsReplication =
+			coercedOptions?.remote &&
+			typeof coercedOptions.remote !== "boolean" &&
+			coercedOptions.remote.replicate;
+		if (
+			resolve &&
+			wantsReplication &&
+			(this.compatibility == null || this.compatibility > 8)
+		) {
+			// SearchRequest cannot carry entries, so a replicated resolved get would
+			// fetch the value and then fetch the entry again during sync.
+			requestClazz = types.SearchRequestIndexed;
+		}
 		if (key instanceof Uint8Array) {
 			const request = new requestClazz({
 				query: [
@@ -1822,15 +1849,14 @@ export class DocumentIndex<
 					let value = set.results[i];
 					let resolved: T | undefined;
 					if (shouldResolve) {
-						resolved =
-							value instanceof types.ResultIndexedValue
-								? (
-										await this.resolveDocument({
-											indexed: value.value,
-											head: value.context.head,
-										})
-									)?.value
-								: value.value;
+						resolved = isResultIndexedValue(value)
+							? (
+									await this.resolveDocument({
+										indexed: value.value,
+										head: value.context.head,
+									})
+								)?.value
+							: value.value;
 					} else {
 						resolved = value.value as T;
 					}
@@ -1846,6 +1872,7 @@ export class DocumentIndex<
 						);
 					} else {
 						missingValues = true;
+						set.results[i] = undefined as any;
 					}
 				}
 
@@ -2001,26 +2028,26 @@ export class DocumentIndex<
 			const resolveFlag = resolvesDocuments(
 				(fromQuery || query) as AnyIterationRequest,
 			);
-				prevQueued = {
-					from,
-					queue: [],
-					timeout: setTimeout(() => {
-						this._resultQueue.delete(query.idString);
-					}, 6e4),
-					keptInIndex: kept,
-					fromQuery: (fromQuery || query) as
-						| types.SearchRequest
-						| types.SearchRequestIndexed
-						| types.IterationRequest,
-					resolveResults: resolveFlag,
-				};
-				// Don't keep Node alive just to GC old remote iterator state.
-				prevQueued.timeout.unref?.();
-				if (
-					fromQuery instanceof types.IterationRequest &&
-					fromQuery.pushUpdates
-				) {
-					prevQueued.pushMode = fromQuery.pushUpdates;
+			prevQueued = {
+				from,
+				queue: [],
+				timeout: setTimeout(() => {
+					this._resultQueue.delete(query.idString);
+				}, 6e4),
+				keptInIndex: kept,
+				fromQuery: (fromQuery || query) as
+					| types.SearchRequest
+					| types.SearchRequestIndexed
+					| types.IterationRequest,
+				resolveResults: resolveFlag,
+			};
+			// Don't keep Node alive just to GC old remote iterator state.
+			prevQueued.timeout.unref?.();
+			if (
+				fromQuery instanceof types.IterationRequest &&
+				fromQuery.pushUpdates
+			) {
+				prevQueued.pushMode = fromQuery.pushUpdates;
 			}
 			this._resultQueue.set(query.idString, prevQueued);
 		}
@@ -2068,8 +2095,11 @@ export class DocumentIndex<
 			} else {
 				const context = result.value.__context;
 				const head = await this._log.log.get(context.head);
-				// assume remote peer will start to replicate (TODO is this ideal?)
 				if (replicateIndexFlag) {
+					if (!head) {
+						continue;
+					}
+					// assume remote peer will start to replicate (TODO is this ideal?)
 					this._log.addPeersToGidPeerHistory(context.gid, [from.hashcode()]);
 				}
 
@@ -2118,19 +2148,19 @@ export class DocumentIndex<
 				string,
 				ReturnType<typeof setTimeout>
 			>());
-			const timer = setTimeout(() => {
-				timers.delete(idString);
-				const queued = this._resultQueue.get(idString);
-				if (queued) {
-					clearTimeout(queued.timeout);
-					this._resultQueue.delete(idString);
-				}
-				this._resumableIterators.close({ idString });
-			}, delay);
-			// This is a best-effort cleanup timer; it should not keep Node alive.
-			timer.unref?.();
-			timers.set(idString, timer);
-		}
+		const timer = setTimeout(() => {
+			timers.delete(idString);
+			const queued = this._resultQueue.get(idString);
+			if (queued) {
+				clearTimeout(queued.timeout);
+				this._resultQueue.delete(idString);
+			}
+			this._resumableIterators.close({ idString });
+		}, delay);
+		// This is a best-effort cleanup timer; it should not keep Node alive.
+		timer.unref?.();
+		timers.set(idString, timer);
+	}
 
 	private cancelIteratorKeepAlive(idString: string) {
 		const timers = this.iteratorKeepAliveTimers;
@@ -2300,8 +2330,7 @@ export class DocumentIndex<
 		onPeer: (pk: PublicSignKey) => Promise<void> | void;
 	}): () => void {
 		const active = new Set<string>();
-		const listener = async (e: { detail: PublicSignKey }) => {
-			const pk = e.detail;
+		const handlePeer = async (pk: PublicSignKey) => {
 			const hash = pk.hashcode();
 			if (hash === this.node.identity.publicKey.hashcode()) return;
 			if (params.signal?.aborted) return;
@@ -2323,8 +2352,36 @@ export class DocumentIndex<
 			}
 		};
 
-		this._query.events.addEventListener("join", listener);
-		return () => this._query.events.removeEventListener("join", listener);
+		const onQueryJoin = (e: { detail: PublicSignKey }) => {
+			void handlePeer(e.detail);
+		};
+		const onReplicatorEvent = (e: { detail: { publicKey: PublicSignKey } }) => {
+			void handlePeer(e.detail.publicKey);
+		};
+
+		this._query.events.addEventListener("join", onQueryJoin);
+		this._log?.events?.addEventListener("replicator:join", onReplicatorEvent);
+		this._log?.events?.addEventListener("replicator:mature", onReplicatorEvent);
+		this._log?.events?.addEventListener(
+			"replication:change",
+			onReplicatorEvent,
+		);
+
+		return () => {
+			this._query.events.removeEventListener("join", onQueryJoin);
+			this._log?.events?.removeEventListener(
+				"replicator:join",
+				onReplicatorEvent,
+			);
+			this._log?.events?.removeEventListener(
+				"replicator:mature",
+				onReplicatorEvent,
+			);
+			this._log?.events?.removeEventListener(
+				"replication:change",
+				onReplicatorEvent,
+			);
+		};
 	}
 
 	processCloseIteratorRequest(
@@ -2363,20 +2420,20 @@ export class DocumentIndex<
 		queryRequest: R,
 		options?: QueryDetailedOptions<T, I, D, boolean | undefined>,
 		fetchFirstForRemote?: Set<string>,
-		): Promise<types.Results<RT>[]> {
-			const local = typeof options?.local === "boolean" ? options?.local : true;
-			let remote:
-				| RemoteQueryOptions<
-						types.AbstractSearchRequest,
-						types.AbstractSearchResult,
-						D
-				  >
-				| undefined = undefined;
-			if (typeof options?.remote === "boolean") {
-				remote = options.remote ? {} : undefined;
-			} else {
-				remote = options?.remote || {};
-			}
+	): Promise<types.Results<RT>[]> {
+		const local = typeof options?.local === "boolean" ? options?.local : true;
+		let remote:
+			| RemoteQueryOptions<
+					types.AbstractSearchRequest,
+					types.AbstractSearchResult,
+					D
+			  >
+			| undefined = undefined;
+		if (typeof options?.remote === "boolean") {
+			remote = options.remote ? {} : undefined;
+		} else {
+			remote = options?.remote || {};
+		}
 		if (remote && remote.priority == null) {
 			// give queries higher priority than other "normal" data activities
 			// without this, we might have a scenario that a peer joina  network with large amount of data to be synced, but can not query anything before that is done
@@ -2421,76 +2478,61 @@ export class DocumentIndex<
 				throw new Error("Unexpected");
 			}
 
-				const coverProps = remote.domain ?? { args: undefined };
-				const isDefaultDomainArgs =
-					!("range" in coverProps) &&
-					(!("args" in coverProps) || (coverProps as any).args == null);
+			const coverProps = remote.domain ?? { args: undefined };
+			const isDefaultDomainArgs =
+				!("range" in coverProps) &&
+				(!("args" in coverProps) || (coverProps as any).args == null);
+			const remoteWasExplicit = options?.remote != null;
 
-				let replicatorGroups = options?.remote?.from
-					? options?.remote?.from
-					: await this._log.getCover(coverProps, {
-							roleAge: remote.minAge,
-							eager: remote.reach?.eager,
-							reachableOnly: !!remote.wait, // when we want to merge joining we can ignore pending to be online peers and instead consider them once they become online
-							signal: options?.signal,
-						});
+			let replicatorGroups = options?.remote?.from
+				? options?.remote?.from
+				: await this._log.getCover(coverProps, {
+						roleAge: remote.minAge,
+						eager: remote.reach?.eager,
+						reachableOnly: !!remote.wait, // when we want to merge joining we can ignore pending to be online peers and instead consider them once they become online
+						signal: options?.signal,
+					});
 
-					// Cold start: cover can be temporarily empty/self-only while replication metadata
-					// converges. For remote search, it's sometimes better to at least try currently
-					// connected peers, but only if we have evidence that a remote replicator exists.
-					if (!options?.remote?.from && isDefaultDomainArgs) {
-						const selfHash = this.node.identity.publicKey.hashcode();
-						const remoteCount = replicatorGroups.filter((h) => h !== selfHash).length;
-						if (remoteCount === 0) {
-							const waitEnabled = Boolean(remote.wait);
-							const coverIsSelfOnly =
-								replicatorGroups.length === 1 && replicatorGroups[0] === selfHash;
+			// Cold start: cover can be temporarily self-only while replication metadata
+			// converges. For explicit remote searches, query bounded connected peers
+			// instead of waiting for replicator metadata to catch up.
+			if (!options?.remote?.from && isDefaultDomainArgs && remoteWasExplicit) {
+				const selfHash = this.node.identity.publicKey.hashcode();
+				const remoteCount = replicatorGroups.filter(
+					(h) => h !== selfHash,
+				).length;
+				if (remoteCount === 0) {
+					const waitEnabled = Boolean(remote.wait);
+					const coverIsSelfOnly =
+						replicatorGroups.length === 1 && replicatorGroups[0] === selfHash;
 
-							// If the cover is explicitly empty (no shards), don't override it unless
-							// the caller requested waiting for joins (e.g. get(waitFor)).
-							if (!waitEnabled && !coverIsSelfOnly) {
-								// no-op
-							} else {
-							let hasKnownRemoteReplicator = false;
-							if (!waitEnabled) {
-								try {
-									const replicators = await this._log.getReplicators();
-									for (const hash of replicators.keys()) {
-										if (hash !== selfHash) {
-											hasKnownRemoteReplicator = true;
-											break;
-										}
-									}
-								} catch {
-									// Best-effort only.
-								}
+					// If the cover is explicitly empty (no shards), don't override it unless
+					// the caller requested waiting for joins (e.g. get(waitFor)).
+					if (waitEnabled || coverIsSelfOnly) {
+						const peerMap: Map<string, unknown> | undefined = (
+							this.node.services.pubsub as any
+						)?.peers;
+						if (peerMap?.keys) {
+							const extra: string[] = [];
+							for (const hash of peerMap.keys()) {
+								if (!hash || hash === selfHash) continue;
+								extra.push(hash);
+								if (extra.length >= 8) break;
 							}
-
-							if (waitEnabled || hasKnownRemoteReplicator) {
-								const peerMap: Map<string, unknown> | undefined = (this.node.services
-									.pubsub as any)?.peers;
-								if (peerMap?.keys) {
-									const extra: string[] = [];
-									for (const hash of peerMap.keys()) {
-										if (!hash || hash === selfHash) continue;
-										extra.push(hash);
-										if (extra.length >= 8) break;
-									}
-									if (extra.length > 0) {
-										replicatorGroups = [
-											...new Set([...replicatorGroups, ...extra]),
-										];
-									}
-								}
+							if (extra.length > 0) {
+								replicatorGroups = [
+									...new Set([...replicatorGroups, ...extra]),
+								];
 							}
-						}
 						}
 					}
+				}
+			}
 
-				if (replicatorGroups) {
-					const responseHandler = async (
-						results: {
-							response: types.AbstractSearchResult;
+			if (replicatorGroups) {
+				const responseHandler = async (
+					results: {
+						response: types.AbstractSearchResult;
 						from?: PublicSignKey;
 					}[],
 				) => {
@@ -2509,11 +2551,17 @@ export class DocumentIndex<
 
 				let extraPromises: Promise<void>[] | undefined = undefined;
 
+				const seenRemoteHashes = new Set<string>();
 				const groupHashes: string[][] = replicatorGroups
 					.filter((hash) => {
 						if (hash === this.node.identity.publicKey.hashcode()) {
 							return false;
 						}
+
+						if (seenRemoteHashes.has(hash)) {
+							return false;
+						}
+						seenRemoteHashes.add(hash);
 
 						if (fetchFirstForRemote?.has(hash)) {
 							// we already fetched this one for remote, no need to do it again
@@ -2726,7 +2774,7 @@ export class DocumentIndex<
 		result: types.ResultValue<T> | types.ResultIndexedValue<I>,
 		results: types.ResultTypeFromRequest<R, T, I>[],
 	) {
-		if (result instanceof types.ResultIndexedValue) {
+		if (isResultIndexedValue(result)) {
 			return coerceWithContext(result.value as I, result.context);
 		}
 
@@ -2744,7 +2792,7 @@ export class DocumentIndex<
 				) => {
 					// look through the search results and see if we can find the indexed representation
 					for (const otherResult of results) {
-						if (otherResult instanceof types.ResultIndexedValue) {
+						if (isResultIndexedValue(otherResult)) {
 							if (otherResult.context.head === result.context.head) {
 								otherResult.init(this.indexedType);
 								return coerceWithContext(
@@ -2983,7 +3031,7 @@ export class DocumentIndex<
 		}
 		const retryMissingResponseGroups =
 			typeof options?.remote === "object"
-				? options.remote.retryMissingResponses ?? true
+				? (options.remote.retryMissingResponses ?? true)
 				: true;
 
 		indexIteratorLogger.trace("Iterate with options", {
@@ -2992,6 +3040,18 @@ export class DocumentIndex<
 		});
 
 		let fetchPromise: Promise<any> | undefined = undefined;
+		let fetchesInFlight = 0;
+		const trackFetch = <T>(promise: Promise<T>): Promise<T> => {
+			fetchesInFlight++;
+			return promise.finally(() => {
+				fetchesInFlight--;
+			});
+		};
+		const setFetchPromise = <T>(promise: Promise<T>): Promise<T> => {
+			const tracked = trackFetch(promise);
+			fetchPromise = tracked;
+			return tracked;
+		};
 		const peerBufferMap: Map<
 			string,
 			{
@@ -3223,7 +3283,7 @@ export class DocumentIndex<
 						if (response instanceof types.NoAccess) {
 							logger.error("Dont have access");
 							return;
-						} else if (response instanceof types.Results) {
+						} else if (isResults(response)) {
 							const results = response as types.Results<
 								types.ResultTypeFromRequest<R, T, I>
 							>;
@@ -3260,7 +3320,7 @@ export class DocumentIndex<
 								const indexKey = indexerTypes.toId(
 									this.indexByResolver(result.value),
 								).primitive;
-								if (result instanceof types.ResultValue) {
+								if (isResultValue(result)) {
 									const existingIndexed = indexedPlaceholders?.get(indexKey);
 									if (existingIndexed) {
 										existingIndexed.value =
@@ -3289,6 +3349,8 @@ export class DocumentIndex<
 										),
 									});
 								} else {
+									const indexedResult =
+										result as unknown as types.ResultIndexedValue<I>;
 									if (
 										visited.has(indexKey) &&
 										!indexedPlaceholders?.has(indexKey)
@@ -3297,12 +3359,12 @@ export class DocumentIndex<
 									}
 									visited.add(indexKey);
 									const indexed = coerceWithContext(
-										result.indexed || result.value,
-										result.context,
+										indexedResult.indexed || indexedResult.value,
+										indexedResult.context,
 									);
 									const placeholder = {
-										value: result.value,
-										context: result.context,
+										value: indexedResult.value,
+										context: indexedResult.context,
 										from,
 										indexed,
 									};
@@ -3326,9 +3388,11 @@ export class DocumentIndex<
 						if (!retryMissingResponseGroups) {
 							return;
 						}
-						const missingGroups = (error as MissingResponsesError & {
-							missingGroups?: string[][];
-						}).missingGroups;
+						const missingGroups = (
+							error as MissingResponsesError & {
+								missingGroups?: string[][];
+							}
+						).missingGroups;
 						if (!missingGroups?.length) {
 							return;
 						}
@@ -3378,19 +3442,19 @@ export class DocumentIndex<
 
 			if (!first) {
 				first = true;
-				fetchPromise = fetchFirst(n);
-				return fetchPromise;
+				return setFetchPromise(fetchFirst(n));
 			}
 
 			if (pendingMissingResponseRetryPeers.size > 0) {
 				const retryTargets = [...pendingMissingResponseRetryPeers];
 				pendingMissingResponseRetryPeers.clear();
-				fetchPromise = fetchFirst(n, {
-					from: retryTargets,
-					// retries for missing groups should not be suppressed by first-fetch dedupe
-					fetchedFirstForRemote: undefined,
-				});
-				return fetchPromise;
+				return setFetchPromise(
+					fetchFirst(n, {
+						from: retryTargets,
+						// retries for missing groups should not be suppressed by first-fetch dedupe
+						fetchedFirstForRemote: undefined,
+					}),
+				);
 			}
 
 			const promises: Promise<any>[] = [];
@@ -3452,7 +3516,7 @@ export class DocumentIndex<
 											const keyPrimitive = indexerTypes.toId(
 												this.indexByResolver(result.value),
 											).primitive;
-											if (result instanceof types.ResultValue) {
+											if (isResultValue(result)) {
 												const existingIndexed =
 													indexedPlaceholders?.get(keyPrimitive);
 												if (existingIndexed) {
@@ -3499,6 +3563,8 @@ export class DocumentIndex<
 													indexed,
 												});
 											} else {
+												const indexedResult =
+													result as unknown as types.ResultIndexedValue<I>;
 												if (
 													visited.has(keyPrimitive) &&
 													!indexedPlaceholders?.has(keyPrimitive)
@@ -3507,12 +3573,12 @@ export class DocumentIndex<
 												}
 												visited.add(keyPrimitive);
 												const indexed = coerceWithContext(
-													result.indexed || result.value,
-													result.context,
+													indexedResult.indexed || indexedResult.value,
+													indexedResult.context,
 												);
 												const placeholder = {
-													value: result.value,
-													context: result.context,
+													value: indexedResult.value,
+													context: indexedResult.context,
 													from: this.node.identity.publicKey,
 													indexed,
 												};
@@ -3601,7 +3667,7 @@ export class DocumentIndex<
 															const indexKey = indexerTypes.toId(
 																this.indexByResolver(result.value),
 															).primitive;
-															if (result instanceof types.ResultValue) {
+															if (isResultValue(result)) {
 																const existingIndexed =
 																	indexedPlaceholders?.get(indexKey);
 																if (existingIndexed) {
@@ -3652,6 +3718,8 @@ export class DocumentIndex<
 																	indexed,
 																});
 															} else {
+																const indexedResult =
+																	result as unknown as types.ResultIndexedValue<I>;
 																if (
 																	visited.has(indexKey) &&
 																	!indexedPlaceholders?.has(indexKey)
@@ -3660,12 +3728,12 @@ export class DocumentIndex<
 																}
 																visited.add(indexKey);
 																const indexed = coerceWithContext(
-																	result.value,
-																	result.context,
+																	indexedResult.value,
+																	indexedResult.context,
 																);
 																const placeholder = {
-																	value: result.value,
-																	context: result.context,
+																	value: indexedResult.value,
+																	context: indexedResult.context,
 																	from: from!,
 																	indexed,
 																};
@@ -3696,9 +3764,28 @@ export class DocumentIndex<
 					resultsLeft += peerBufferMap.get(peer)?.kept || 0;
 				}
 			}
-			return (fetchPromise = Promise.all(promises).then(() => {
-				return resultsLeft === 0; // 0 results left to fetch and 0 pending results
-			}));
+			return setFetchPromise(
+				Promise.all(promises).then(async () => {
+					if (keepRemoteWaitOpen && resultsLeft === 0) {
+						const bufferedAfterCollect = peerBuffers().length;
+						const hasObservedResults = visited.size > 0;
+						// When the initial cover drains before satisfying the requested batch,
+						// probe any already-known replicators we have not queried yet instead of
+						// waiting only for a future join/update event.
+						if (
+							hasObservedResults &&
+							bufferedAfterCollect < n &&
+							joinFetchesInFlight === 0
+						) {
+							const recoveredLatePeers = await fetchLateJoinPeers();
+							if (recoveredLatePeers) {
+								return false;
+							}
+						}
+					}
+					return resultsLeft === 0; // 0 results left to fetch and 0 pending results
+				}),
+			);
 		};
 
 		const next = async (n: number) => {
@@ -3725,9 +3812,7 @@ export class DocumentIndex<
 			// blocking on an eager remote top-up for the full requested batch size.
 			// This keeps `next(n)` responsive when a late push/update arrives while a
 			// remote iterator has no more immediate items to collect.
-			const fetchedAll = preferBufferedResults
-				? false
-				: await fetchAtLeast(n);
+			const fetchedAll = preferBufferedResults ? false : await fetchAtLeast(n);
 
 			// get n next top entries, shift and pull more results
 			const peerBuffersArr = peerBuffers();
@@ -3770,7 +3855,7 @@ export class DocumentIndex<
 				coercedBatch = (
 					await Promise.all(
 						batch.map(async (x) => {
-							const withContext = coerceWithContext(
+							const resolved =
 								x.value instanceof this.documentType
 									? x.value
 									: (
@@ -3778,9 +3863,11 @@ export class DocumentIndex<
 												head: x.context.head,
 												indexed: x.indexed,
 											})
-										)?.value,
-								x.context,
-							);
+										)?.value;
+							if (!resolved) {
+								return undefined;
+							}
+							const withContext = coerceWithContext(resolved, x.context);
 							const withIndexed = coerceWithIndexed(withContext, x.indexed);
 							return withIndexed;
 						}),
@@ -3815,32 +3902,30 @@ export class DocumentIndex<
 			done = true;
 		};
 
-			let close = async () => {
-				cleanupAndDone();
+		let close = async () => {
+			cleanupAndDone();
 
-				// Keep-open iterators can still have active remote state even when
-				// their pending count has already drained to zero.
-				const closeRequest = new types.CloseIteratorRequest({
-					id: queryRequestCoerced.id,
-				});
-				const selfHash = this.node.identity.publicKey.hashcode();
-				const remotePeers = keepRemoteAlive
-					? [...peerBufferMap.keys()].filter((peer) => peer !== selfHash)
-					: [...peerBufferMap.entries()]
-							.filter(
-								([peer, buffer]) => peer !== selfHash && buffer.kept > 0,
-							)
-							.map(([peer]) => peer);
-				peerBufferMap.clear();
-				await Promise.allSettled(
-					remotePeers.map((peer) =>
-						this._query.send(closeRequest, {
-							...options,
-							mode: new SilentDelivery({ to: [peer], redundancy: 1 }),
-						}),
-					),
-				);
-			};
+			// Keep-open iterators can still have active remote state even when
+			// their pending count has already drained to zero.
+			const closeRequest = new types.CloseIteratorRequest({
+				id: queryRequestCoerced.id,
+			});
+			const selfHash = this.node.identity.publicKey.hashcode();
+			const remotePeers = keepRemoteAlive
+				? [...peerBufferMap.keys()].filter((peer) => peer !== selfHash)
+				: [...peerBufferMap.entries()]
+						.filter(([peer, buffer]) => peer !== selfHash && buffer.kept > 0)
+						.map(([peer]) => peer);
+			peerBufferMap.clear();
+			await Promise.allSettled(
+				remotePeers.map((peer) =>
+					this._query.send(closeRequest, {
+						...options,
+						mode: new SilentDelivery({ to: [peer], redundancy: 1 }),
+					}),
+				),
+			);
+		};
 		options?.signal && options.signal.addEventListener("abort", close);
 
 		let doneFn = () => {
@@ -3853,8 +3938,10 @@ export class DocumentIndex<
 		const pendingMissingResponseRetryPeers = new Set<string>();
 		const missingResponseRetryAttempts = new Map<string, number>();
 		const maxMissingResponseRetryAttempts = 2;
+		let joinFetchesInFlight = 0;
 
 		let updateDeferred: ReturnType<typeof pDefer> | undefined;
+		const updateWaiters = new Set<ReturnType<typeof pDefer<void>>>();
 		const onLateResultsQueue =
 			options?.outOfOrder?.mode === "queue" &&
 			typeof options?.outOfOrder?.handle === "function"
@@ -3970,9 +4057,20 @@ export class DocumentIndex<
 				runNotify(reason);
 			}
 			updateDeferred?.resolve();
+			for (const waiter of updateWaiters) {
+				waiter.resolve();
+			}
+			updateWaiters.clear();
 		};
 		const _waitForUpdate = () =>
 			updateDeferred ? updateDeferred.promise : Promise.resolve();
+		const waitForAnyUpdate = () => {
+			const waiter = pDefer<void>();
+			updateWaiters.add(waiter);
+			return waiter.promise.finally(() => {
+				updateWaiters.delete(waiter);
+			});
+		};
 
 		// ---------------- Live updates wiring (sorted-only with optional filter) ----------------
 		const updateCallbacks = updateCallbacksRaw;
@@ -4070,7 +4168,7 @@ export class DocumentIndex<
 					const indexKey = indexerTypes.toId(
 						this.indexByResolver(result.value),
 					).primitive;
-					if (result instanceof types.ResultValue) {
+					if (isResultValue(result)) {
 						const existingIndexed = indexedPlaceholders?.get(indexKey);
 						if (existingIndexed) {
 							existingIndexed.value =
@@ -4113,18 +4211,20 @@ export class DocumentIndex<
 							indexed,
 						});
 					} else {
+						const indexedResult =
+							result as unknown as types.ResultIndexedValue<I>;
 						const indexed = coerceWithContext(
-							result.indexed || result.value,
-							result.context,
+							indexedResult.indexed || indexedResult.value,
+							indexedResult.context,
 						);
 						const late = isLateResult(indexed);
 						if (late) {
 							lateCount++;
 							lateResults?.push({
 								indexed,
-								context: result.context,
+								context: indexedResult.context,
 								from: from!,
-								value: result.value,
+								value: indexedResult.value,
 							});
 							if (outOfOrderMode === "drop") {
 								visited.add(indexKey);
@@ -4136,8 +4236,8 @@ export class DocumentIndex<
 						}
 						visited.add(indexKey);
 						const placeholder = {
-							value: result.value,
-							context: result.context,
+							value: indexedResult.value,
+							context: indexedResult.context,
 							from,
 							indexed,
 						};
@@ -4188,7 +4288,7 @@ export class DocumentIndex<
 							continue;
 						}
 						const payload = response.response;
-						if (!(payload instanceof types.Results)) {
+						if (!isResults(payload)) {
 							continue;
 						}
 						await mergePrefetchedResults(
@@ -4249,6 +4349,7 @@ export class DocumentIndex<
 					indexBy: this.indexBy,
 					nested: this.nestedProperties,
 				});
+				await index.start();
 				return index;
 			};
 
@@ -4337,8 +4438,9 @@ export class DocumentIndex<
 								Partial<WithIndexed<T, I>>;
 							const indexedCandidate = await toIndexedWithContext(addedValue);
 							if (filterIndex) {
-								filterIndex.drop();
-								filterIndex.put(indexedCandidate);
+								await filterIndex.drop();
+								await filterIndex.start();
+								await filterIndex.put(indexedCandidate);
 								const matches =
 									(
 										await filterIndex
@@ -4425,7 +4527,9 @@ export class DocumentIndex<
 		}
 
 		const remoteConfig =
-			options && typeof options.remote === "object" ? options.remote : undefined;
+			options && typeof options.remote === "object"
+				? options.remote
+				: undefined;
 		const remoteWaitPolicy =
 			remoteConfig && typeof remoteConfig.wait === "object"
 				? remoteConfig.wait
@@ -4433,13 +4537,176 @@ export class DocumentIndex<
 		const remoteWaitBehavior: WaitBehavior =
 			remoteWaitPolicy?.behavior ?? "keep-open";
 		const keepRemoteWaitOpen =
-			!!remoteConfig?.wait &&
-			remoteWaitBehavior === "keep-open";
+			!!remoteConfig?.wait && remoteWaitBehavior === "keep-open";
+		let fetchLateJoinPeers = async (
+			_candidateHashes?: Iterable<string>,
+			_candidateKeys?: Map<string, PublicSignKey>,
+		) => false;
 
 		if (keepRemoteWaitOpen) {
 			// was used to account for missed results when a peer joins; omitted in this minimal handler
 
 			updateDeferred = pDefer<void>();
+			const lateJoinFetchesInFlight = new Set<string>();
+			const shouldIgnoreLateJoinFetchError = (error: unknown) => {
+				if (
+					this.closed ||
+					ensureController().signal.aborted ||
+					error instanceof ClosedError ||
+					error instanceof AbortError
+				) {
+					return true;
+				}
+				return (
+					error instanceof Error &&
+					error.message.trim().toLowerCase() === "closed"
+				);
+			};
+
+			fetchLateJoinPeers = async (
+				candidateHashes?: Iterable<string>,
+				candidateKeys?: Map<string, PublicSignKey>,
+			) => {
+				if (totalFetchedCounter === 0) {
+					return false;
+				}
+				if (this.closed || ensureController().signal.aborted) {
+					return false;
+				}
+
+				if (done) {
+					unsetDone();
+				}
+
+				const selfHash = this.node.identity.publicKey.hashcode();
+				const knownCandidateKeys = candidateKeys
+					? new Map(candidateKeys)
+					: new Map<string, PublicSignKey>();
+				let hashes: string[];
+				try {
+					hashes = candidateHashes
+						? [...candidateHashes]
+						: [...(await this._log.getReplicators()).keys()];
+				} catch (error) {
+					if (shouldIgnoreLateJoinFetchError(error)) {
+						return false;
+					}
+					throw error;
+				}
+				let missing = hashes.filter((hash) => {
+					if (hash === selfHash) return false;
+					if (peerBufferMap.has(hash)) return false;
+					if (fetchedFirstForRemote!.has(hash)) return false;
+					if (lateJoinFetchesInFlight.has(hash)) return false;
+					return true;
+				});
+				if (missing.length === 0 && !candidateHashes) {
+					const connectedPeers = (this.node.services.pubsub as any)?.peers as
+						| Map<string, unknown>
+						| undefined;
+					if (connectedPeers?.size) {
+						const connectedCandidates = [...connectedPeers.keys()].filter(
+							(hash) =>
+								hash !== selfHash &&
+								!hashes.includes(hash) &&
+								!peerBufferMap.has(hash) &&
+								!fetchedFirstForRemote!.has(hash) &&
+								!lateJoinFetchesInFlight.has(hash),
+						);
+						if (connectedCandidates.length > 0) {
+							const discovered = await Promise.all(
+								connectedCandidates.slice(0, 8).map(async (hash) => {
+									const pk = await this.node.services.pubsub.getPublicKey(hash);
+									if (!pk) {
+										return undefined;
+									}
+									try {
+										await this._log.waitForReplicator(pk, {
+											signal: ensureController().signal,
+											eager: true,
+											timeout: 250,
+										});
+										knownCandidateKeys.set(hash, pk);
+										return hash;
+									} catch {
+										return undefined;
+									}
+								}),
+							);
+							missing = discovered.filter((hash): hash is string => !!hash);
+						}
+					}
+				}
+				if (missing.length === 0) {
+					return false;
+				}
+
+				missing.forEach((hash) => lateJoinFetchesInFlight.add(hash));
+				joinFetchesInFlight += missing.length;
+
+				try {
+					const unresolved = missing.filter((hash) => {
+						if (peerBufferMap.has(hash)) return false;
+						if (fetchedFirstForRemote!.has(hash)) return false;
+						return true;
+					});
+
+					if (unresolved.length === 0) {
+						return false;
+					}
+
+					const lateJoinFetchPromise = trackFetch(
+						fetchFirst(totalFetchedCounter, {
+							from: unresolved,
+							fetchedFirstForRemote,
+						}),
+					);
+					try {
+						await lateJoinFetchPromise;
+					} catch (error) {
+						if (shouldIgnoreLateJoinFetchError(error)) {
+							return false;
+						}
+						throw error;
+					}
+					for (const hash of unresolved) {
+						if (!peerBufferMap.has(hash)) {
+							fetchedFirstForRemote?.delete(hash);
+						}
+					}
+
+					if (onLateResultsQueue || onLateResultsDrop) {
+						for (const hash of unresolved) {
+							const pending = peerBufferMap.get(hash)?.buffer;
+							if (!pending || pending.length === 0) {
+								continue;
+							}
+
+							const peer = knownCandidateKeys.get(hash);
+							if (lastDeliveredIndexed) {
+								const delivered = lastDeliveredIndexed;
+								const lateItems = pending.filter(
+									(item) => compareIndexed(item.indexed, delivered) < 0,
+								);
+								if (lateItems.length > 0) {
+									notifyLateResults?.(lateItems.length, peer, lateItems);
+								}
+							} else {
+								notifyLateResults?.(pending.length, peer, pending);
+							}
+						}
+					}
+
+					if (!pendingBatchReason) {
+						pendingBatchReason = "join";
+					}
+					signalUpdate("join");
+					return true;
+				} finally {
+					missing.forEach((hash) => lateJoinFetchesInFlight.delete(hash));
+					joinFetchesInFlight -= missing.length;
+				}
+			};
 
 			const waitForTime = remoteWaitPolicy?.timeout;
 
@@ -4462,36 +4729,7 @@ export class DocumentIndex<
 				onPeer: async (pk) => {
 					if (done) return;
 					const hash = pk.hashcode();
-					await fetchPromise; // ensure fetches in flight are done
-					if (peerBufferMap.has(hash)) return;
-					if (fetchedFirstForRemote!.has(hash)) return;
-					if (totalFetchedCounter > 0) {
-						fetchPromise = fetchFirst(totalFetchedCounter, {
-							from: [hash],
-							fetchedFirstForRemote,
-						});
-						await fetchPromise;
-						if (onLateResultsQueue || onLateResultsDrop) {
-							const pending = peerBufferMap.get(hash)?.buffer;
-							if (pending && pending.length > 0) {
-								if (lastDeliveredIndexed) {
-									const delivered = lastDeliveredIndexed;
-									const lateItems = pending.filter(
-										(item) => compareIndexed(item.indexed, delivered) < 0,
-									);
-									if (lateItems.length > 0) {
-										notifyLateResults?.(lateItems.length, pk, lateItems);
-									}
-								} else {
-									notifyLateResults?.(pending.length, pk, pending);
-								}
-							}
-						}
-					}
-					if (!pendingBatchReason) {
-						pendingBatchReason = "join";
-					}
-					signalUpdate("join");
+					await fetchLateJoinPeers([hash], new Map([[hash, pk]]));
 				},
 			});
 			const cleanupDefault = cleanup;
@@ -4531,27 +4769,68 @@ export class DocumentIndex<
 			next,
 			done: doneFn,
 			pending: async () => {
+				const countPending = () => {
+					let total = 0;
+					for (const buffer of peerBufferMap.values()) {
+						total += buffer.kept + buffer.buffer.length;
+					}
+					return total;
+				};
+
 				try {
+					let pendingTotal = countPending();
+					if (remoteWaitActive && first) {
+						if (pendingTotal === 0) {
+							await fetchLateJoinPeers();
+							pendingTotal = countPending();
+						}
+
+						const shouldPrimePending =
+							!done &&
+							keepRemoteAlive &&
+							(!pushUpdates || !first) &&
+							pendingTotal === 0 &&
+							joinFetchesInFlight === 0;
+						if (shouldPrimePending && fetchesInFlight === 0) {
+							const primePending = fetchAtLeast(1).catch((error) => {
+								warn("Failed to prime keep-open iterator pending state", error);
+							});
+							if (remoteWaitActive) {
+								await Promise.race([primePending, waitForAnyUpdate()]);
+							} else {
+								await primePending;
+							}
+						}
+						return countPending();
+					}
+
 					await fetchPromise;
+					pendingTotal = countPending();
 					// In push-update mode, remotes will stream new results proactively.
 					// After the iterator has been primed (`first === true`), calling
 					// `fetchAtLeast(1)` from `pending()` can double-count by pulling from
 					// the remote iterator while we also have pushed results buffered locally.
 					//
-					// We still need to prime the iterator at least once so `pending()` is meaningful
-					// even before the first `next(...)` call.
-					if (!done && keepRemoteAlive && (!pushUpdates || !first)) {
+					// In keep-open remote-wait mode, we also avoid starting another remote
+					// collect while a late-join fetch is already in flight or when we already
+					// have buffered results to report. This keeps `pending()` observational
+					// enough to avoid starving late joins behind unrelated long-poll collects,
+					// while preserving the existing "pull one more" behavior when there is
+					// nothing buffered yet.
+					const shouldPrimePending =
+						!done &&
+						keepRemoteAlive &&
+						(!pushUpdates || !first) &&
+						pendingTotal === 0 &&
+						!(remoteWaitActive && first && joinFetchesInFlight > 0);
+					if (shouldPrimePending) {
 						await fetchAtLeast(1);
 					}
 				} catch (error) {
 					warn("Failed to refresh iterator pending state", error);
 				}
 
-				let total = 0;
-				for (const buffer of peerBufferMap.values()) {
-					total += buffer.kept + buffer.buffer.length;
-				}
-				return total;
+				return countPending();
 			},
 			all: async () => {
 				drain = true;
@@ -4650,6 +4929,7 @@ export class DocumentIndex<
 			indexBy: this.indexBy,
 			nested: this.nestedProperties,
 		});
+		await temporaryIndex.start();
 		for (const value of intoIndexable) {
 			temporaryIndex.put(value);
 		}

@@ -1,5 +1,5 @@
 import { TestSession } from "@peerbit/libp2p-test-utils";
-import { delay, waitForResolved } from "@peerbit/time";
+import { TimeoutError, delay, waitForResolved } from "@peerbit/time";
 import { expect } from "chai";
 import { FanoutChannel, FanoutTree } from "../src/index.js";
 
@@ -184,6 +184,97 @@ describe("fanout-tree", () => {
 
 				await waitForChannelAttachment(ch, 25);
 				expect(ch.parent).to.equal("parent");
+			} finally {
+				await session.stop();
+			}
+		});
+
+		it("reports attachment waits as delivery timeouts", async () => {
+			const session: TestSession<{ fanout: FanoutTree }> =
+				await createFanoutTestSession(1);
+
+			try {
+				const fanout = session.peers[0].services.fanout as any;
+				const waitForChannelAttachment = fanout.waitForChannelAttachment.bind(fanout) as (
+					ch: any,
+					timeoutMs: number,
+				) => Promise<void>;
+				const ch = {
+					isRoot: false,
+					parent: undefined as string | undefined,
+					id: { topic: "attachment-timeout", root: "root" },
+				};
+
+				await expect(waitForChannelAttachment(ch, 5)).to.be.rejectedWith(
+					TimeoutError,
+					"fanout proxy publish timed out waiting for attachment",
+				);
+			} finally {
+				await session.stop();
+			}
+		});
+
+		it("returns false when maybe-publishing to a channel that is not open", async () => {
+			const session: TestSession<{ fanout: FanoutTree }> =
+				await createFanoutTestSession(1);
+
+			try {
+				const fanout = session.peers[0].services.fanout;
+				const ok = await fanout.publishToChannelMaybe(
+					"missing-channel",
+					fanout.publicKeyHash,
+					new Uint8Array([1]),
+				);
+				expect(ok).to.equal(false);
+			} finally {
+				await session.stop();
+			}
+		});
+
+		it("returns false for late channel-close races on maybe-publish but still rethrows unexpected errors", async () => {
+			const session: TestSession<{ fanout: FanoutTree }> =
+				await createFanoutTestSession(1);
+
+			try {
+				const fanout = session.peers[0].services.fanout;
+				const topic = "maybe-publish-close-race";
+				const root = fanout.publicKeyHash;
+
+				fanout.openChannel(topic, root, {
+					role: "root",
+					msgRate: 1,
+					msgSize: 8,
+					uploadLimitBps: 1_000_000,
+					maxChildren: 1,
+					repair: false,
+				});
+
+				const originalPublishToChannel =
+					fanout.publishToChannel.bind(fanout);
+
+				try {
+					fanout.publishToChannel = (async () => {
+						throw new Error(`Channel not open: ${topic} (${root})`);
+					}) as typeof fanout.publishToChannel;
+
+					const ok = await fanout.publishToChannelMaybe(
+						topic,
+						root,
+						new Uint8Array([1]),
+					);
+					expect(ok).to.equal(false);
+
+					fanout.publishToChannel = (async () => {
+						throw new Error("unexpected publish failure");
+					}) as typeof fanout.publishToChannel;
+
+					await expect(
+						fanout.publishToChannelMaybe(topic, root, new Uint8Array([1])),
+					).to.be.rejectedWith("unexpected publish failure");
+				} finally {
+					fanout.publishToChannel =
+						originalPublishToChannel as typeof fanout.publishToChannel;
+				}
 			} finally {
 				await session.stop();
 			}

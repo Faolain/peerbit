@@ -417,6 +417,192 @@
   * devDependencies
     * @peerbit/test-utils bumped from ^2.0.32 to ^2.0.33
 
+## [6.0.33](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.32...rpc-v6.0.33) (2026-05-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.29
+    * @peerbit/pubsub bumped to 5.2.10
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.33
+
+## [6.0.32](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.31...rpc-v6.0.32) (2026-05-04)
+
+
+### Bug Fixes
+
+* **rpc:** bound requests during slow publish ([743644a](https://github.com/dao-xyz/peerbit/commit/743644a727d25c5c935104cdde8369d2aa09845a))
+* **rpc:** bound requests during slow publish ([beaec62](https://github.com/dao-xyz/peerbit/commit/beaec624304042384cb341247445acfeeadd5fd6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.28
+    * @peerbit/pubsub bumped to 5.2.9
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.32
+
+## [6.0.31](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.30...rpc-v6.0.31) (2026-05-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.27
+    * @peerbit/pubsub bumped to 5.2.8
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.31
+
+## [6.0.30](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.29...rpc-v6.0.30) (2026-05-02)
+
+
+### Bug Fixes
+
+* stabilize file-share large transfer paths ([#762](https://github.com/dao-xyz/peerbit/issues/762)) ([66116f4](https://github.com/dao-xyz/peerbit/commit/66116f432279f4ed5e9b32abab041fa89ad3e22e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.26
+    * @peerbit/pubsub bumped to 5.2.7
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.30
+
+## [6.0.29](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.28...rpc-v6.0.29) (2026-05-01)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.25
+    * @peerbit/pubsub bumped to 5.2.6
+    * @peerbit/pubsub-interface bumped to 5.1.3
+    * @peerbit/stream-interface bumped to 6.0.9
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.29
+
+## [6.0.28](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.27...rpc-v6.0.28) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.24
+    * @peerbit/pubsub bumped to 5.2.5
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.28
+
+## [6.0.27](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.26...rpc-v6.0.27) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.23
+    * @peerbit/pubsub bumped to 5.2.4
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.27
+
+## [6.0.26](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.25...rpc-v6.0.26) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.22
+    * @peerbit/pubsub bumped to 5.2.3
+    * @peerbit/pubsub-interface bumped to 5.1.2
+    * @peerbit/stream-interface bumped to 6.0.8
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.26
+
+## [6.0.25](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.24...rpc-v6.0.25) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.21
+    * @peerbit/pubsub bumped to 5.2.2
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.25
+
+## [6.0.24](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.23...rpc-v6.0.24) (2026-04-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.20
+    * @peerbit/pubsub bumped to 5.2.1
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.24
+
+## [6.0.23](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.22...rpc-v6.0.23) (2026-04-28)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.19
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.23
+
+## [6.0.22](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.21...rpc-v6.0.22) (2026-04-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.18
+    * @peerbit/pubsub bumped to 5.2.0
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.22
+
+## [6.0.21](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.20...rpc-v6.0.21) (2026-04-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.17
+    * @peerbit/pubsub bumped to 5.1.6
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.21
+
+## [6.0.20](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.19...rpc-v6.0.20) (2026-03-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 3.1.1
+    * @peerbit/logger bumped to 2.0.1
+    * @peerbit/program bumped to 6.0.16
+    * @peerbit/pubsub bumped to 5.1.5
+    * @peerbit/pubsub-interface bumped to 5.1.1
+    * @peerbit/stream-interface bumped to 6.0.7
+  * devDependencies
+    * @peerbit/test-utils bumped to 3.0.20
+
 ## [6.0.19](https://github.com/dao-xyz/peerbit/compare/rpc-v6.0.18...rpc-v6.0.19) (2026-03-29)
 
 

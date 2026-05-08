@@ -201,6 +201,77 @@ describe("rpc", () => {
 			);
 		});
 
+		it("ignores duplicate responses from an expected responder", () => {
+			const from = responder.node.identity.publicKey;
+			const allResults: RPCResponse<Body>[] = [];
+			const responders = new Set<string>();
+			const expectedResponders = new Set<string>([from.hashcode()]);
+			const deferred = {
+				resolve: sinon.spy(),
+				reject: sinon.spy(),
+				promise: Promise.resolve(),
+			};
+			const onResponse = sinon.spy();
+			const decoded = {
+				response: new Body({ arr: new Uint8Array([1, 2, 3]) }),
+				from,
+				message: undefined as any,
+			};
+
+			(reader.query as any).handleDecodedResponse(
+				decoded,
+				deferred,
+				allResults,
+				responders,
+				expectedResponders,
+				{ onResponse },
+			);
+			(reader.query as any).handleDecodedResponse(
+				decoded,
+				deferred,
+				allResults,
+				responders,
+				expectedResponders,
+				{ onResponse },
+			);
+
+			expect(allResults).to.have.length(1);
+			expect(onResponse.calledOnce).to.be.true;
+			expect(deferred.resolve.calledOnce).to.be.true;
+		});
+
+		it("bounds slow publishes by the request timeout", async () => {
+			let observedSignal: AbortSignal | undefined;
+			const publishStub = sinon
+				.stub(reader.node.services.pubsub, "publish")
+				.callsFake((_data, options?: { signal?: AbortSignal }) => {
+					observedSignal = options?.signal;
+					return new Promise<Uint8Array | undefined>((_resolve, reject) => {
+						observedSignal?.addEventListener(
+							"abort",
+							() => {
+								reject(observedSignal?.reason ?? new AbortError("Aborted"));
+							},
+							{ once: true },
+						);
+					});
+				});
+
+			try {
+				const started = Date.now();
+				const result = await reader.query.request(
+					new Body({ arr: new Uint8Array([1, 2, 3]) }),
+					{ timeout: 25 },
+				);
+
+				expect(result).to.deep.equal([]);
+				expect(observedSignal?.aborted).to.be.true;
+				expect(Date.now() - started).to.be.lessThan(1_000);
+			} finally {
+				publishStub.restore();
+			}
+		});
+
 		it("custom signer", async () => {
 			const requestEventFromResponder: CustomEvent<RequestEvent<Body>>[] = [];
 			const responseEventsFromResponder: CustomEvent<ResponseEvent<Body>>[] =

@@ -63,6 +63,15 @@ type BlockMessageContext = {
 	transport?: RequestTransportContext;
 };
 
+type InFlightRead = {
+	promise: Promise<Block<any, any, any, 1> | undefined>;
+	addProviders: (providers: string[]) => void;
+};
+
+type RemoteReadOptions = Exclude<GetOptions["remote"], boolean | undefined> & {
+	hasher?: any;
+};
+
 export class RemoteBlocks implements IBlocks {
 	localStore: BlockStore;
 
@@ -78,10 +87,7 @@ export class RemoteBlocks implements IBlocks {
 	private readonly maxRequeryOnReachable: number;
 
 	private _loadFetchQueue: PQueue;
-	private _readFromPeersPromises: Map<
-		string,
-		Promise<Block<any, any, any, 1> | undefined> | undefined
-	>;
+	private _readFromPeersPromises: Map<string, InFlightRead>;
 	_open = false;
 	private _events: TypedEventEmitter<{
 		"peer:reachable": CustomEvent<PublicSignKey>;
@@ -106,6 +112,21 @@ export class RemoteBlocks implements IBlocks {
 				cid: string,
 				options?: { signal?: AbortSignal },
 			) => Promise<string[] | undefined> | string[] | undefined;
+			/**
+			 * Optional push-based provider watcher used to wake pending remote reads as soon as
+			 * provider availability changes.
+			 *
+			 * This complements `resolveProviders` with an event-first path. Implementations may
+			 * still rely on best-effort discovery internally, but should invoke `onProviders`
+			 * promptly when new candidates become known.
+			 */
+			watchProviders?: (
+				cid: string,
+				options: {
+					signal?: AbortSignal;
+					onProviders: (providers: string[]) => void;
+				},
+			) => void | { close: () => void } | (() => void);
 			/**
 			 * Optional hook called after a block is stored locally (best-effort).
 			 *
@@ -436,13 +457,7 @@ export class RemoteBlocks implements IBlocks {
 	private async _readFromPeers(
 		cidString: string,
 		cidObject: CID,
-		options: {
-			signal?: AbortSignal;
-			timeout?: number;
-			hasher?: any;
-			from?: string[];
-			priority?: number;
-		} = {},
+		options: RemoteReadOptions = {},
 	): Promise<Uint8Array | undefined> {
 		const codec = (codecCodes as any)[cidObject.code];
 
@@ -483,10 +498,10 @@ export class RemoteBlocks implements IBlocks {
 			this.rememberProviderHints(cidString, providers);
 		}
 
-		let promise = this._readFromPeersPromises.get(cidString);
-		if (!promise) {
-			const attemptedProviders = new Set<string>(providers);
-			promise = new Promise<Block<any, any, any, 1> | undefined>(
+		let inFlight = this._readFromPeersPromises.get(cidString);
+		if (!inFlight) {
+			let publishAdditionalProviders: (providers: string[]) => void = () => {};
+			const promise = new Promise<Block<any, any, any, 1> | undefined>(
 				(resolve, reject) => {
 					let timeoutCallback: ReturnType<typeof setTimeout> | undefined;
 					const abortHandler = () => {
@@ -520,18 +535,24 @@ export class RemoteBlocks implements IBlocks {
 				},
 			);
 
-			this._readFromPeersPromises.set(cidString, promise);
-
 			let requeryCount = 0;
 			const maxRequests = Math.max(1, this.maxRequeryOnReachable);
-			const retryIntervalMs = Math.max(
+			const requestRetryIntervalMs = Math.max(
 				1_000,
 				Math.min(
 					5_000,
 					Math.floor((options.timeout ?? 30_000) / Math.max(2, maxRequests)),
 				),
 			);
+			const providerDiscoveryRetryIntervalMs = Math.max(
+				250,
+				Math.min(1_000, Math.floor(requestRetryIntervalMs / 2)),
+			);
 			let retryTimeout: ReturnType<typeof setTimeout> | undefined;
+			let stopWatchingProviders:
+				| void
+				| (() => void)
+				| { close: () => void };
 			const refreshProviders = async (force = false) => {
 				if (!canResolveLater) return;
 				if (!force && explicitFrom.length > 0) return;
@@ -541,23 +562,25 @@ export class RemoteBlocks implements IBlocks {
 				});
 				if (resolved.length > 0) {
 					providers = this.normalizeProviderHints([...providers, ...resolved]);
-					for (const provider of providers) {
-						attemptedProviders.add(provider);
-					}
 				}
 			};
-			const tryPublishRequest = async (properties?: { refreshProviders?: boolean }) => {
-				if (requeryCount >= maxRequests) return;
+			const tryPublishRequest = async (properties?: {
+				refreshProviders?: boolean;
+				force?: boolean;
+				providers?: string[];
+			}) => {
+				if (requeryCount >= maxRequests && !properties?.force) return;
 				if (providers.length === 0 || properties?.refreshProviders) {
 					await refreshProviders(properties?.refreshProviders === true);
 				}
 				if (providers.length === 0) return;
 				try {
 					const expiresAt = Date.now() + (options.timeout ?? 30_000);
-					const requestProviders = this.pickRequestBatch(
-						providers,
-						requeryCount,
-					);
+					const requestProviders =
+						properties?.providers && properties.providers.length > 0
+							? this.normalizeProviderHints(properties.providers)
+							: this.pickRequestBatch(providers, requeryCount);
+					if (requestProviders.length === 0) return;
 					await this.options.publish(
 						new BlockRequest(cidString),
 						{
@@ -575,11 +598,45 @@ export class RemoteBlocks implements IBlocks {
 					dontThrowIfDeliveryError(e);
 				}
 			};
+			publishAdditionalProviders = (nextProviders: string[]) => {
+				if (!this._resolvers.has(cidString)) return;
+				const requestProviders = this.normalizeProviderHints(nextProviders);
+				if (requestProviders.length === 0) return;
+				const merged = this.normalizeProviderHints([
+					...requestProviders,
+					...providers,
+				]);
+				if (merged.length === 0) return;
+				let changed = merged.length !== providers.length;
+				if (!changed) {
+					for (let i = 0; i < merged.length; i++) {
+						if (merged[i] !== providers[i]) {
+							changed = true;
+							break;
+						}
+					}
+				}
+				if (!changed) return;
+				providers = merged;
+				tryPublishRequest({ force: true, providers: requestProviders }).catch(
+					dontThrowIfDeliveryError,
+				);
+			};
+			inFlight = {
+				promise,
+				addProviders: (nextProviders) => publishAdditionalProviders(nextProviders),
+			};
+			this._readFromPeersPromises.set(cidString, inFlight);
+
 			const scheduleRetry = () => {
 				if (retryTimeout) {
 					clearTimeout(retryTimeout);
 				}
 				if (requeryCount >= maxRequests) return;
+				const retryIntervalMs =
+					providers.length > 0
+						? requestRetryIntervalMs
+						: providerDiscoveryRetryIntervalMs;
 				retryTimeout = setTimeout(() => {
 					if (!this._resolvers.has(cidString)) return;
 					tryPublishRequest({ refreshProviders: true })
@@ -598,13 +655,28 @@ export class RemoteBlocks implements IBlocks {
 			};
 
 			const publishOnProviderHints = (ev: CustomEvent<{ cid: string }>) => {
-				if (requeryCount >= maxRequests) return;
 				if (!ev?.detail?.cid) return;
 				if (ev.detail.cid !== cidString) return;
-				tryPublishRequest({ refreshProviders: true }).catch(
+				tryPublishRequest({ refreshProviders: true, force: true }).catch(
 					dontThrowIfDeliveryError,
 				);
 			};
+
+			if (canResolveLater && explicitFrom.length === 0 && this.options.watchProviders) {
+				stopWatchingProviders = this.options.watchProviders(cidString, {
+					signal: options.signal,
+					onProviders: (nextProviders) => {
+						if (!this._resolvers.has(cidString)) return;
+						const normalized = this.normalizeProviderHints(nextProviders);
+						if (normalized.length === 0) return;
+						this.rememberProviderHints(cidString, normalized);
+						providers = this.normalizeProviderHints([...providers, ...normalized]);
+						tryPublishRequest({ force: true, providers: normalized }).catch(
+							dontThrowIfDeliveryError,
+						);
+					},
+				});
+			}
 
 			this._events.addEventListener("peer:reachable", publishOnNewPeers);
 			this._events.addEventListener("providers:hints", publishOnProviderHints);
@@ -620,11 +692,63 @@ export class RemoteBlocks implements IBlocks {
 				this._readFromPeersPromises.delete(cidString);
 				this._events.removeEventListener("peer:reachable", publishOnNewPeers);
 				this._events.removeEventListener("providers:hints", publishOnProviderHints);
+				if (typeof stopWatchingProviders === "function") {
+					stopWatchingProviders();
+				} else if (stopWatchingProviders) {
+					stopWatchingProviders?.close();
+				}
 			}
 		} else {
-			const result = await promise;
-			return result?.bytes;
+			if (providers.length > 0) {
+				inFlight.addProviders(providers);
+			}
+			return this.waitForInFlightRead(inFlight, options);
 		}
+	}
+
+	private waitForInFlightRead(
+		inFlight: InFlightRead,
+		options: RemoteReadOptions,
+	): Promise<Uint8Array | undefined> {
+		if (options.timeout == null && options.signal == null) {
+			return inFlight.promise.then((result) => result?.bytes);
+		}
+
+		return new Promise((resolve, reject) => {
+			let settled = false;
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			const cleanup = () => {
+				if (timeout) clearTimeout(timeout);
+				options.signal?.removeEventListener("abort", abort);
+			};
+			const finish = (callback: () => void) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				callback();
+			};
+			const abort = () => {
+				finish(() => reject(new AbortError()));
+			};
+
+			if (options.signal?.aborted) {
+				abort();
+				return;
+			}
+
+			if (options.timeout != null) {
+				timeout = setTimeout(() => {
+					finish(() => resolve(undefined));
+				}, Math.max(0, options.timeout));
+			}
+			options.signal?.addEventListener("abort", abort, { once: true });
+
+			inFlight.promise.then(
+				(result) => finish(() => resolve(result?.bytes)),
+				(error) => finish(() => reject(error)),
+			);
+		});
 	}
 
 	async stop(): Promise<void> {

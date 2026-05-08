@@ -167,6 +167,70 @@ describe("transport", function () {
 		expect(new Uint8Array(read!)).to.deep.equal(data);
 	});
 
+	it("can wake an in-flight get from watchProviders before retry polling", async () => {
+		session = await TestSession.connected(2, {
+			services: {
+				blocks: (c) =>
+					new DirectBlock(c, {
+						resolveProviders: () => [],
+						watchProviders: (_cid, { onProviders }) => {
+							const timer = setTimeout(() => {
+								onProviders([store(session, 0).publicKeyHash]);
+							}, 50);
+							return () => clearTimeout(timer);
+						},
+					}),
+			},
+		});
+
+		await store(session, 0).start();
+		await store(session, 1).start();
+		await waitForNeighbour(store(session, 0), store(session, 1));
+
+		const data = new Uint8Array([5, 4, 3]);
+		const cid = await store(session, 0).put(data);
+		expect(cid).equal("zb2rhbnwihVzMMEGAPf9EwTZBsQz9fszCnM4Y8mJmBFgiyN7J");
+
+		const read = await store(session, 1).get(cid, {
+			remote: { timeout: 200 },
+		});
+		expect(new Uint8Array(read!)).to.deep.equal(data);
+	});
+
+	it("rechecks provider discovery quickly while a get is already waiting", async () => {
+		let providersReady = false;
+		session = await TestSession.connected(2, {
+			services: {
+				blocks: (c) =>
+					new DirectBlock(c, {
+						resolveProviders: () =>
+							providersReady ? [store(session, 0).publicKeyHash] : [],
+					}),
+			},
+		});
+
+		await store(session, 0).start();
+		await store(session, 1).start();
+		await waitForNeighbour(store(session, 0), store(session, 1));
+
+		const data = new Uint8Array([5, 4, 3]);
+		const cid = await store(session, 0).put(data);
+		expect(cid).equal("zb2rhbnwihVzMMEGAPf9EwTZBsQz9fszCnM4Y8mJmBFgiyN7J");
+
+		const startedAt = Date.now();
+		const readPromise = store(session, 1).get(cid, {
+			remote: { timeout: 10_000 },
+		});
+
+		setTimeout(() => {
+			providersReady = true;
+		}, 250);
+
+		const read = await readPromise;
+		expect(new Uint8Array(read!)).to.deep.equal(data);
+		expect(Date.now() - startedAt).to.be.lessThan(3_000);
+	});
+
 	it("can recover when explicit providers are stale but resolver knows a better peer", async () => {
 		session = await TestSession.disconnected(3, {
 			services: {
@@ -231,6 +295,96 @@ describe("transport", function () {
 			},
 		});
 		expect(new Uint8Array(read!)).to.deep.equal(data);
+	});
+
+	it("widens an in-flight read when a later caller supplies a better explicit provider", async () => {
+		session = await TestSession.disconnected(3, {
+			services: {
+				blocks: (c) =>
+					new DirectBlock(c, {
+						resolveProviders: () => [],
+						requeryOnReachable: 1,
+					}),
+			},
+		});
+
+		await store(session, 0).start();
+		await store(session, 1).start();
+		await store(session, 2).start();
+
+		await session.connect([[session.peers[0], session.peers[1]]]);
+		await waitForNeighbour(store(session, 0), store(session, 1));
+
+		const data = new Uint8Array([5, 4, 3]);
+		const cid = await store(session, 0).put(data);
+		expect(cid).equal("zb2rhbnwihVzMMEGAPf9EwTZBsQz9fszCnM4Y8mJmBFgiyN7J");
+
+		const requesterRemoteBlocks = (store(session, 1) as any)[
+			"remoteBlocks"
+		] as RemoteBlocks;
+		const providerRemoteBlocks = (store(session, 0) as any)[
+			"remoteBlocks"
+		] as RemoteBlocks;
+		const originalRequesterPublish = requesterRemoteBlocks.options.publish;
+		const originalProviderPublish = providerRemoteBlocks.options.publish;
+		let requestsToProvider = 0;
+		const staleRequestSeen = pDefer<void>();
+
+		requesterRemoteBlocks.options.publish = async (message: any, options: any) => {
+			if (message instanceof BlockRequest) {
+				const to = (options?.mode as any)?.to ?? [];
+				if (to.includes(store(session, 2).publicKeyHash)) {
+					staleRequestSeen.resolve();
+				}
+				if (to.includes(store(session, 0).publicKeyHash)) {
+					requestsToProvider++;
+					await providerRemoteBlocks.onMessage(message, {
+						from: store(session, 1).publicKeyHash,
+					});
+				}
+				return;
+			}
+			return originalRequesterPublish(message, options);
+		};
+
+		providerRemoteBlocks.options.publish = async (message: any, options: any) => {
+			if (message instanceof BlockResponse) {
+				const to = (options?.to ?? (options?.mode as any)?.to ?? []) as string[];
+				if (to.includes(store(session, 1).publicKeyHash)) {
+					await requesterRemoteBlocks.onMessage(message, {
+						from: store(session, 0).publicKeyHash,
+					});
+				}
+				return;
+			}
+			return originalProviderPublish(message, options);
+		};
+
+		try {
+			const staleRead = store(session, 1).get(cid, {
+				remote: {
+					timeout: 5_000,
+					from: [store(session, 2).publicKeyHash],
+				},
+			});
+
+			await staleRequestSeen.promise;
+
+			const widenedRead = store(session, 1).get(cid, {
+				remote: {
+					timeout: 5_000,
+					from: [store(session, 0).publicKeyHash],
+				},
+			});
+
+			const read = await widenedRead;
+			expect(new Uint8Array(read!)).to.deep.equal(data);
+			expect(new Uint8Array((await staleRead)!)).to.deep.equal(data);
+			expect(requestsToProvider).to.equal(1);
+		} finally {
+			requesterRemoteBlocks.options.publish = originalRequesterPublish;
+			providerRemoteBlocks.options.publish = originalProviderPublish;
+		}
 	});
 
 	it("probes additional explicit providers when the first candidate does not answer", async () => {
@@ -541,6 +695,32 @@ describe("transport", function () {
 		const t2 = +new Date();
 		expect(readData).equal(undefined);
 		expect(t2 - t1 < 3100);
+	});
+
+	it("honors shorter caller timeout when reusing an in-flight get", async () => {
+		session = await TestSession.connected(2, {
+			services: { blocks: (c) => new DirectBlock(c) },
+		});
+		await waitForNeighbour(store(session, 0), store(session, 1));
+
+		const missingCid = "zb3we1BmfxpFg6bCXmrsuEo8JuQrGEf7RyFBdRxEHLuqc4CSr";
+		const firstRead = store(session, 0)
+			.get(missingCid, {
+				remote: { timeout: 1000, from: [store(session, 1).publicKeyHash] },
+			})
+			.catch((): undefined => undefined);
+
+		await delay(25);
+
+		const t1 = +new Date();
+		const secondRead = await store(session, 0).get(missingCid, {
+			remote: { timeout: 100, from: [store(session, 1).publicKeyHash] },
+		});
+		const t2 = +new Date();
+
+		expect(secondRead).equal(undefined);
+		expect(t2 - t1).to.be.lessThan(500);
+		await firstRead;
 	});
 
 	it("iterate", async () => {

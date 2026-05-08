@@ -1,3 +1,5 @@
+const MIN_MEMORY_HEADROOM_BALANCE_SCALER = 0.25;
+
 export class PIDReplicationController {
 	integral!: number;
 	prevError!: number;
@@ -49,16 +51,23 @@ export class PIDReplicationController {
 		let errorMemory = 0;
 
 		if (this.maxMemoryLimit != null) {
+			// Treat the configured storage limit as a ceiling, not the exact control
+			// target. A small reserve prevents discrete entry sizes and delayed checked
+			// prunes from repeatedly settling just above the hard budget.
+			const effectiveMemoryLimit =
+				this.maxMemoryLimit > 0 ? this.maxMemoryLimit * 0.95 : 0;
 			errorMemory =
 				currentFactor > 0 && memoryUsage > 0
-					? Math.max(Math.min(1, this.maxMemoryLimit / estimatedTotalSize), 0) -
-						currentFactor
+					? Math.max(
+							Math.min(1, effectiveMemoryLimit / estimatedTotalSize),
+							0,
+						) - currentFactor
 					: 0;
 			// Math.max(Math.min((this.maxMemoryLimit - memoryUsage) / 100e5, 1), -1)// Math.min(Math.max((this.maxMemoryLimit - memoryUsage, 0) / 10e5, 0), 1);
 		}
 
 		const errorCoverageUnmodified = Math.min(1 - totalFactor, 1);
-		const errorCoverage =
+		let errorCoverage =
 			(this.maxMemoryLimit ? 1 - Math.sqrt(Math.abs(errorMemory)) : 1) *
 			errorCoverageUnmodified;
 
@@ -71,14 +80,26 @@ export class PIDReplicationController {
 		// is material. This avoids oscillations around `totalFactor ~= 1`.
 		const coverageDeficit = Math.max(0, errorCoverageUnmodified); // ~= max(0, 1 - totalFactor)
 		const negativeBalanceScale =
-			coverageDeficit <= 0
-				? 1
-				: 1 - Math.min(1, coverageDeficit / 0.1); // full clamp at 10% deficit
+			coverageDeficit <= 0 ? 1 : 1 - Math.min(1, coverageDeficit / 0.1); // full clamp at 10% deficit
 		const errorFromEvenForBalance =
 			errorFromEven >= 0 ? errorFromEven : errorFromEven * negativeBalanceScale;
 
+		const hasMemoryHeadroom =
+			this.maxMemoryLimit != null && this.maxMemoryLimit > 0 && errorMemory > 0;
+		if (hasMemoryHeadroom && errorFromEvenForBalance > 0) {
+			// Coverage surplus often means another peer has not pruned yet. Do not let
+			// that transient surplus cancel a constrained peer that is still below an
+			// even share and has storage headroom to take more work.
+			errorCoverage = Math.max(errorCoverage, 0);
+		}
+
 		const balanceErrorScaler = this.maxMemoryLimit
-			? Math.abs(errorMemory)
+			? hasMemoryHeadroom
+				? Math.max(
+						Math.abs(errorMemory),
+						MIN_MEMORY_HEADROOM_BALANCE_SCALER,
+					)
+				: Math.abs(errorMemory)
 			: 1 - Math.abs(errorCoverage);
 
 		// Balance should be symmetric (allow negative error) so a peer can *reduce*
@@ -99,7 +120,7 @@ export class PIDReplicationController {
 		// TODO make these self-optimizing
 
 		let totalError: number;
-		const errorMemoryFactor = 0.9;
+		let errorMemoryFactor = 0.9;
 		const errorBalanceFactor = 0.6;
 
 		totalError =
@@ -108,6 +129,20 @@ export class PIDReplicationController {
 
 		// Computer is getting too full?
 		if (errorMemory < 0) {
+			if (
+				this.maxMemoryLimit != null &&
+				this.maxMemoryLimit > 0 &&
+				coverageDeficit > 0
+			) {
+				// When the ring is materially under-covered, shrinking a memory-limited
+				// range can increase gap-boundary assignments and make local memory usage
+				// worse, not better. Let the coverage term dominate until the floor is
+				// restored, while preserving the hard shrink behavior for zero-capacity peers.
+				errorMemoryFactor = Math.max(
+					0.2,
+					errorMemoryFactor - 0.7 * Math.min(1, coverageDeficit / 0.25),
+				);
+			}
 			totalError =
 				errorMemory * errorMemoryFactor + totalError * (1 - errorMemoryFactor);
 		}
@@ -138,7 +173,19 @@ export class PIDReplicationController {
 
 		// Calculate the new replication factor
 		const change = pTerm + iTerm + dTerm;
-		const newFactor = currentFactor + change;
+		let newFactor = currentFactor + change;
+
+		if (this.maxCPUUsage != null && this.maxMemoryLimit == null) {
+			// CPU pressure may shed surplus replicas, but it must not create a
+			// coverage gap where the network no longer has one full copy.
+			const coverageSurplus = Math.max(0, totalFactor - 1);
+			if (newFactor < currentFactor) {
+				newFactor =
+					coverageSurplus <= 0
+						? currentFactor
+						: Math.max(newFactor, currentFactor - coverageSurplus);
+			}
+		}
 
 		// Update state for the next iteration
 		this.prevError = totalError;

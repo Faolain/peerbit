@@ -108,6 +108,39 @@
     * @peerbit/crypto bumped from 2.1.7 to 2.2.0
     * @peerbit/stream-interface bumped from ^5.0.1 to ^5.0.2
 
+## [5.1.3](https://github.com/dao-xyz/peerbit/compare/pubsub-interface-v5.1.2...pubsub-interface-v5.1.3) (2026-05-01)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/stream-interface bumped to 6.0.9
+
+## [5.1.2](https://github.com/dao-xyz/peerbit/compare/pubsub-interface-v5.1.1...pubsub-interface-v5.1.2) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/stream-interface bumped to 6.0.8
+
+## [5.1.1](https://github.com/dao-xyz/peerbit/compare/pubsub-interface-v5.1.0...pubsub-interface-v5.1.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* **packages:** normalize npm metadata for released modules ([#702](https://github.com/dao-xyz/peerbit/issues/702)) ([bc77b1d](https://github.com/dao-xyz/peerbit/commit/bc77b1d196f86d3783050903e85bef720d703cf2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 3.1.1
+    * @peerbit/stream-interface bumped to 6.0.7
+
 ## [5.1.0](https://github.com/dao-xyz/peerbit/compare/pubsub-interface-v5.0.7...pubsub-interface-v5.1.0) (2026-03-18)
 
 

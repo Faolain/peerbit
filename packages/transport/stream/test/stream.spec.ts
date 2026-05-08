@@ -29,7 +29,13 @@ import {
 	SilentDelivery,
 	getMsgId,
 } from "@peerbit/stream-interface";
-import { TimeoutError, delay, waitFor, waitForResolved } from "@peerbit/time";
+import {
+	AbortError,
+	TimeoutError,
+	delay,
+	waitFor,
+	waitForResolved,
+} from "@peerbit/time";
 import { expect } from "chai";
 import crypto from "crypto";
 import { type Libp2pOptions, createLibp2p } from "libp2p";
@@ -314,6 +320,79 @@ const service = <
 	(s.peers[i].services as Record<string, unknown>)[serviceName] as TService;
 
 describe("streams", function () {
+	it("processes queued inbound messages by transport priority", async () => {
+		const session = await disconnected(2);
+		try {
+			const sender = stream(session, 0);
+			const receiver = stream(session, 1);
+			receiver.queue.concurrency = 1;
+
+			const processed: number[] = [];
+			const firstLowStarted = pDefer<void>();
+			const releaseFirstLow = pDefer<void>();
+			let lowMessagesStarted = 0;
+
+			(receiver as any).processMessage = async (
+				_from: PublicSignKey,
+				_peerStream: PeerStreams,
+				msg: Uint8ArrayList,
+				decoded?: Message,
+			) => {
+				const message = decoded ?? Message.from(msg);
+				const priority = message.header.priority ?? 0;
+				processed.push(priority);
+
+				if (priority === 0) {
+					lowMessagesStarted++;
+					if (lowMessagesStarted === 1) {
+						firstLowStarted.resolve();
+						await releaseFirstLow.promise;
+					}
+				}
+			};
+
+			const create = (priority: number, byte: number) =>
+				sender.createMessage(new Uint8Array([byte]), {
+					mode: new SilentDelivery({
+						to: [receiver.publicKeyHash],
+						redundancy: 1,
+					}),
+					priority,
+				});
+			const asList = (bytes: Uint8Array | Uint8ArrayList) =>
+				bytes instanceof Uint8ArrayList ? bytes : new Uint8ArrayList(bytes);
+
+			const lowMessages = await Promise.all([
+				create(0, 1),
+				create(0, 2),
+				create(0, 3),
+			]);
+			const lowPromises = lowMessages.map((message) =>
+				receiver.processRpc(
+					sender.publicKey,
+					{} as PeerStreams,
+					asList(message.bytes()),
+				),
+			);
+
+			await firstLowStarted.promise;
+			const highMessage = await create(3, 200);
+			const highPromise = receiver.processRpc(
+				sender.publicKey,
+				{} as PeerStreams,
+				asList(highMessage.bytes()),
+			);
+
+			await delay(0);
+			releaseFirstLow.resolve();
+			await Promise.all([...lowPromises, highPromise]);
+
+			expect(processed).to.deep.equal([0, 3, 0, 0]);
+		} finally {
+			await session.stop();
+		}
+	});
+
 	describe("signing", () => {
 		let session: TestSessionStream;
 
@@ -2672,6 +2751,128 @@ describe("streams", function () {
 				}
 			});
 
+			it("does not emit unhandledRejection when delivery aborts before publishMessage returns", async () => {
+				const isolated = await disconnected(1, {
+					services: {
+						directstream: (c) =>
+							new TestDirectStream(c, {
+								connectionManager: false,
+							}),
+					},
+				});
+
+				const unhandled: unknown[] = [];
+				const onUnhandledRejection = (reason: unknown) => {
+					unhandled.push(reason);
+				};
+
+				process.on("unhandledRejection", onUnhandledRejection);
+
+				try {
+					const writer = stream(isolated, 0) as TestDirectStream;
+					const remoteKey = await Ed25519Keypair.create();
+					const peer = writer.addPeer(
+						{ toString: () => "blocked-peer" } as PeerId,
+						remoteKey.publicKey,
+						"/test/0.0.0",
+						"conn-blocked",
+					);
+					peer.waitForWrite = async () => {
+						await delay(100);
+					};
+
+					const message = await writer.createMessage(crypto.randomBytes(32), {
+						mode: new AcknowledgeDelivery({
+							redundancy: 1,
+							to: [remoteKey.publicKey.hashcode()],
+						}),
+					});
+					const abortController = new AbortController();
+					const publishPromise = writer.publishMessage(
+						writer.publicKey,
+						message,
+						[peer],
+						undefined,
+						abortController.signal,
+					);
+					publishPromise.catch(() => {});
+
+					await delay(10);
+					abortController.abort(new Error("intentional test abort"));
+					await delay(25);
+					expect(unhandled).to.deep.equal([]);
+
+					await publishPromise.catch(() => {});
+				} finally {
+					process.off("unhandledRejection", onUnhandledRejection);
+					await isolated.stop();
+				}
+			});
+
+			it("passes publish abort signals into queued peer writes", async () => {
+				const isolated = await disconnected(1, {
+					services: {
+						directstream: (c) =>
+							new TestDirectStream(c, {
+								connectionManager: false,
+							}),
+					},
+				});
+
+				try {
+					const writer = stream(isolated, 0) as TestDirectStream;
+					const remoteKey = await Ed25519Keypair.create();
+					const peer = writer.addPeer(
+						{ toString: () => "blocked-peer" } as PeerId,
+						remoteKey.publicKey,
+						"/test/0.0.0",
+						"conn-blocked",
+					);
+
+					let observedSignal: AbortSignal | undefined;
+					peer.waitForWrite = async (_bytes, _priority, signal) => {
+						observedSignal = signal;
+						return new Promise<void>((_resolve, reject) => {
+							signal?.addEventListener(
+								"abort",
+								() => reject(signal.reason ?? new AbortError("Aborted")),
+								{ once: true },
+							);
+						});
+					};
+
+					const message = await writer.createMessage(crypto.randomBytes(32), {
+						mode: new AcknowledgeDelivery({
+							redundancy: 1,
+							to: [remoteKey.publicKey.hashcode()],
+						}),
+					});
+					const abortController = new AbortController();
+					const started = Date.now();
+					const publishPromise = writer.publishMessage(
+						writer.publicKey,
+						message,
+						[peer],
+						undefined,
+						abortController.signal,
+					);
+
+					await delay(10);
+					abortController.abort(new AbortError("intentional test abort"));
+
+					let rejection: unknown;
+					await publishPromise.catch((error) => {
+						rejection = error;
+					});
+
+					expect(observedSignal).to.equal(abortController.signal);
+					expect(rejection).to.be.instanceOf(Error);
+					expect(Date.now() - started).to.be.lessThan(1_000);
+				} finally {
+					await isolated.stop();
+				}
+			});
+
 			it("publishMaybe returns false for delivery errors and still throws internal errors", async () => {
 				const isolated = await disconnected(1, {
 					services: {
@@ -2785,21 +2986,73 @@ describe("streams", function () {
 		afterEach(async () => {
 			await session.stop();
 		});
-		it("max message size", async () => {
-			await expect(
-				session.peers[0].services.directstream.publish(
-					new Uint8Array(1e7 + 1001),
+			it("max message size", async () => {
+				await expect(
+					session.peers[0].services.directstream.publish(
+						new Uint8Array(1e7 + 1001),
 					{
 						mode: new AcknowledgeDelivery({
 							to: [session.peers[1].services.directstream.publicKeyHash],
 							redundancy: 1,
 						}),
 					},
-				),
-			).rejectedWith(/^Message too large/);
+					),
+				).rejectedWith(/^Message too large/);
+			});
+
+			it("delivers 512 KiB acknowledged direct messages", async () => {
+				const payload = new Uint8Array(512 * 1024);
+				const received = pDefer<void>();
+				stream(session, 1).addEventListener(
+					"data",
+					(event) => {
+						const message = event.detail;
+						if (message.dataByteLength === payload.byteLength) {
+							received.resolve();
+						}
+					},
+					{ once: true },
+				);
+
+				await stream(session, 0).publish(payload, {
+					mode: new AcknowledgeDelivery({
+						to: [stream(session, 1).publicKeyHash],
+						redundancy: 1,
+					}),
+				});
+				await received.promise;
+			});
+
+			it("delivers sustained 512 KiB acknowledged direct messages", async function () {
+				this.timeout(120_000);
+
+				const payload = new Uint8Array(512 * 1024);
+				const count = 1_000;
+				const received = pDefer<void>();
+				let receivedCount = 0;
+
+				stream(session, 1).addEventListener("data", (event) => {
+					const message = event.detail;
+					if (message.dataByteLength === payload.byteLength) {
+						receivedCount += 1;
+						if (receivedCount === count) {
+							received.resolve();
+						}
+					}
+				});
+
+				for (let i = 0; i < count; i++) {
+					await stream(session, 0).publish(payload, {
+						mode: new AcknowledgeDelivery({
+							to: [stream(session, 1).publicKeyHash],
+							redundancy: 1,
+						}),
+					});
+				}
+				await received.promise;
+			});
 		});
 	});
-});
 
 // TODO test that messages are not sent backward, triangles etc
 

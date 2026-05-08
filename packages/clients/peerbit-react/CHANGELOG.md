@@ -1,5 +1,181 @@
 # Changelog
 
+## [1.1.21](https://github.com/dao-xyz/peerbit/compare/react-v1.1.20...react-v1.1.21) (2026-05-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.32
+    * @peerbit/program bumped to 6.0.29
+    * @peerbit/program-react bumped to 0.4.32
+    * peerbit bumped to 5.2.18
+
+## [1.1.20](https://github.com/dao-xyz/peerbit/compare/react-v1.1.19...react-v1.1.20) (2026-05-04)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.31
+    * @peerbit/program bumped to 6.0.28
+    * @peerbit/program-react bumped to 0.4.31
+    * peerbit bumped to 5.2.17
+
+## [1.1.19](https://github.com/dao-xyz/peerbit/compare/react-v1.1.18...react-v1.1.19) (2026-05-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.30
+    * @peerbit/program bumped to 6.0.27
+    * @peerbit/program-react bumped to 0.4.30
+    * peerbit bumped to 5.2.16
+
+## [1.1.18](https://github.com/dao-xyz/peerbit/compare/react-v1.1.17...react-v1.1.18) (2026-05-02)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.29
+    * @peerbit/program bumped to 6.0.26
+    * @peerbit/program-react bumped to 0.4.29
+    * peerbit bumped to 5.2.15
+
+## [1.1.17](https://github.com/dao-xyz/peerbit/compare/react-v1.1.16...react-v1.1.17) (2026-05-01)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.28
+    * @peerbit/program bumped to 6.0.25
+    * @peerbit/program-react bumped to 0.4.28
+    * peerbit bumped to 5.2.14
+
+## [1.1.16](https://github.com/dao-xyz/peerbit/compare/react-v1.1.15...react-v1.1.16) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.27
+    * @peerbit/program bumped to 6.0.24
+    * @peerbit/program-react bumped to 0.4.27
+    * peerbit bumped to 5.2.13
+
+## [1.1.15](https://github.com/dao-xyz/peerbit/compare/react-v1.1.14...react-v1.1.15) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.26
+    * @peerbit/program bumped to 6.0.23
+    * @peerbit/program-react bumped to 0.4.26
+    * peerbit bumped to 5.2.12
+
+## [1.1.14](https://github.com/dao-xyz/peerbit/compare/react-v1.1.13...react-v1.1.14) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.25
+    * @peerbit/program bumped to 6.0.22
+    * @peerbit/program-react bumped to 0.4.25
+    * peerbit bumped to 5.2.11
+
+## [1.1.13](https://github.com/dao-xyz/peerbit/compare/react-v1.1.12...react-v1.1.13) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.24
+    * @peerbit/program bumped to 6.0.21
+    * @peerbit/program-react bumped to 0.4.24
+    * peerbit bumped to 5.2.10
+
+## [1.1.12](https://github.com/dao-xyz/peerbit/compare/react-v1.1.11...react-v1.1.12) (2026-04-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.23
+    * @peerbit/program bumped to 6.0.20
+    * @peerbit/program-react bumped to 0.4.23
+    * peerbit bumped to 5.2.9
+
+## [1.1.11](https://github.com/dao-xyz/peerbit/compare/react-v1.1.10...react-v1.1.11) (2026-04-28)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.22
+    * @peerbit/program bumped to 6.0.19
+    * @peerbit/program-react bumped to 0.4.22
+    * peerbit bumped to 5.2.8
+
+## [1.1.10](https://github.com/dao-xyz/peerbit/compare/react-v1.1.9...react-v1.1.10) (2026-04-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.21
+    * @peerbit/program bumped to 6.0.18
+    * @peerbit/program-react bumped to 0.4.21
+    * peerbit bumped to 5.2.7
+
+## [1.1.9](https://github.com/dao-xyz/peerbit/compare/react-v1.1.8...react-v1.1.9) (2026-04-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.20
+    * @peerbit/program bumped to 6.0.17
+    * @peerbit/program-react bumped to 0.4.20
+    * peerbit bumped to 5.2.6
+
+## [1.1.8](https://github.com/dao-xyz/peerbit/compare/react-v1.1.7...react-v1.1.8) (2026-03-30)
+
+
+### Bug Fixes
+
+* **packages:** normalize npm metadata for released modules ([#702](https://github.com/dao-xyz/peerbit/issues/702)) ([bc77b1d](https://github.com/dao-xyz/peerbit/commit/bc77b1d196f86d3783050903e85bef720d703cf2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/canonical-client bumped to 1.1.19
+    * @peerbit/crypto bumped to 3.1.1
+    * @peerbit/indexer-interface bumped to 3.0.3
+    * @peerbit/logger bumped to 2.0.1
+    * @peerbit/program bumped to 6.0.16
+    * @peerbit/program-react bumped to 0.4.19
+    * peerbit bumped to 5.2.5
+
 ## [1.1.7](https://github.com/dao-xyz/peerbit/compare/react-v1.1.6...react-v1.1.7) (2026-03-29)
 
 

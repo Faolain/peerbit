@@ -97,11 +97,18 @@ const warn = logger.newScope("warn");
 
 export { BandwidthTracker }; // might be useful for others
 
+const getErrorName = (e: any): string | undefined =>
+	e?.name ?? e?.constructor?.name;
+
 export const dontThrowIfDeliveryError = (e: any) => {
+	const errorName = getErrorName(e);
 	if (
 		e instanceof DeliveryError ||
 		e instanceof TimeoutError ||
-		e instanceof AbortError
+		e instanceof AbortError ||
+		errorName === "DeliveryError" ||
+		errorName === "TimeoutError" ||
+		errorName === "AbortError"
 	) {
 		return;
 	}
@@ -132,6 +139,7 @@ const waitForDrain = async (
 		const cleanup = () => {
 			if (done) return;
 			done = true;
+			clearTimeout(fallbackTimer);
 			stream.removeEventListener("drain", onDrain);
 			stream.removeEventListener("close", onClose);
 			signal?.removeEventListener("abort", onAbort);
@@ -150,6 +158,9 @@ const waitForDrain = async (
 			const err = detail?.error ?? (event as any)?.error;
 			reject(err ?? new Error("Stream closed"));
 		};
+		// Some libp2p streams can return backpressure without later emitting drain.
+		// Do not let a missed drain permanently stall higher-priority traffic.
+		const fallbackTimer = setTimeout(onDrain, 250);
 		stream.addEventListener("drain", onDrain, { once: true });
 		stream.addEventListener("close", onClose, { once: true });
 		signal?.addEventListener("abort", onAbort, { once: true });
@@ -2131,15 +2142,29 @@ export abstract class DirectStream<
 		// logger.trace("rpc from " + from + ", " + this.peerIdStr);
 
 		if (message.length > 0) {
+			let decodedMessage: Message | undefined;
+			let priority = 0;
+			try {
+				decodedMessage = Message.from(message);
+				priority = decodedMessage.header.priority ?? 0;
+			} catch {
+				// This is only a best-effort priority peek. processMessage()
+				// performs the authoritative decode and logs invalid frames.
+			}
 			//	logger.trace("messages from " + from);
 			await this.queue
 				.add(async () => {
 					try {
-						await this.processMessage(from, peerStreams, message);
+						await this.processMessage(
+							from,
+							peerStreams,
+							message,
+							decodedMessage,
+						);
 					} catch (err: any) {
 						logger.error(err);
 					}
-				})
+				}, { priority })
 				.catch(logError);
 		}
 
@@ -2165,15 +2190,16 @@ export abstract class DirectStream<
 		from: PublicSignKey,
 		peerStream: PeerStreams,
 		msg: Uint8ArrayList,
+		decodedMessage?: Message,
 	) {
 		if (!this.started) {
 			return;
 		}
 
 		// Ensure the message is valid before processing it
-		let message: Message | undefined;
+		let message: Message | undefined = decodedMessage;
 		try {
-			message = Message.from(msg);
+			message ??= Message.from(msg);
 		} catch (error) {
 			warn(error, "Failed to decode message frame from", from.hashcode());
 			return;
@@ -2752,10 +2778,11 @@ export abstract class DirectStream<
 		message: DataMessage | Goodbye,
 		relayed?: boolean,
 		signal?: AbortSignal,
-	): Promise<{ promise: Promise<void> }> {
+	): Promise<{ promise: Promise<void>; startTimeout: () => void }> {
 		if (message.header.mode instanceof AnyWhere) {
 			return {
 				promise: Promise.resolve(),
+				startTimeout: () => {},
 			};
 		}
 
@@ -2765,6 +2792,7 @@ export abstract class DirectStream<
 		if (existing) {
 			return {
 				promise: existing.promise,
+				startTimeout: () => {},
 			};
 		}
 
@@ -2789,15 +2817,19 @@ export abstract class DirectStream<
 
 		if (haveReceivers && this.peers.size === 0) {
 			return {
-				promise: Promise.reject(
-					new DeliveryError(
-						"Cannnot deliver message to peers because there are no peers to deliver to",
+				promise: markPromiseHandled(
+					Promise.reject(
+						new DeliveryError(
+							"Cannnot deliver message to peers because there are no peers to deliver to",
+						),
 					),
 				),
+				startTimeout: () => {},
 			};
 		}
 
 		const deliveryDeferredPromise = pDefer<void>();
+		markPromiseHandled(deliveryDeferredPromise.promise);
 
 		if (!haveReceivers) {
 			deliveryDeferredPromise.resolve(); // we dont know how many answer to expect, just resolve immediately
@@ -2829,7 +2861,13 @@ export abstract class DirectStream<
 		onUnreachable && this.addEventListener("peer:unreachable", onUnreachable);
 
 		let onAbort: (() => void) | undefined;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		let cleared = false;
 		const clear = () => {
+			if (cleared) {
+				return;
+			}
+			cleared = true;
 			timeout && clearTimeout(timeout);
 			onUnreachable &&
 				this.removeEventListener("peer:unreachable", onUnreachable);
@@ -2837,7 +2875,11 @@ export abstract class DirectStream<
 			onAbort && signal?.removeEventListener("abort", onAbort);
 		};
 
-			const timeout = setTimeout(async () => {
+		const startTimeout = () => {
+			if (cleared || timeout) {
+				return;
+			}
+			timeout = setTimeout(async () => {
 				clear();
 
 			let hasAll = true;
@@ -2879,6 +2921,7 @@ export abstract class DirectStream<
 				deliveryDeferredPromise.resolve();
 			}
 			}, this.seekTimeout);
+		};
 
 		if (signal) {
 			onAbort = () => {
@@ -2985,7 +3028,10 @@ export abstract class DirectStream<
 				deliveryDeferredPromise.resolve();
 			},
 		});
-		return deliveryDeferredPromise;
+		return {
+			promise: deliveryDeferredPromise.promise,
+			startTimeout,
+		};
 	}
 
 	public async publishMessage(
@@ -3001,6 +3047,7 @@ export abstract class DirectStream<
 
 		const isRelayed = relayed ?? from.hashcode() !== this.publicKeyHash;
 		let delivereyPromise: Promise<void> | undefined = undefined as any;
+		let startDeliveryTimeout: (() => void) | undefined;
 		let ackCallbackId: string | undefined;
 
 		if (
@@ -3028,6 +3075,7 @@ export abstract class DirectStream<
 				signal,
 			);
 			delivereyPromise = deliveryDeferredPromise.promise;
+			startDeliveryTimeout = deliveryDeferredPromise.startTimeout;
 			ackCallbackId = toBase64(message.id);
 		}
 
@@ -3050,6 +3098,7 @@ export abstract class DirectStream<
 				) {
 					if (message.header.mode.to.length === 0) {
 						// we definitely know that we should not forward the message anywhere
+						startDeliveryTimeout?.();
 						return delivereyPromise;
 					}
 
@@ -3076,11 +3125,17 @@ export abstract class DirectStream<
 										stream,
 										message.bytes(),
 										message.header.priority,
+										signal,
 									),
 								);
 							} else {
 								promises.push(
-									this.waitForPeerWrite(stream, bytes, message.header.priority),
+									this.waitForPeerWrite(
+										stream,
+										bytes,
+										message.header.priority,
+										signal,
+									),
 								);
 							}
 							usedNeighbours.add(neighbour);
@@ -3105,12 +3160,18 @@ export abstract class DirectStream<
 								if (usedNeighbours.has(neighbour)) continue;
 								usedNeighbours.add(neighbour);
 								promises.push(
-									this.waitForPeerWrite(stream, bytes, message.header.priority),
+									this.waitForPeerWrite(
+										stream,
+										bytes,
+										message.header.priority,
+										signal,
+									),
 								);
 							}
 						}
 
 						await Promise.all(promises);
+						startDeliveryTimeout?.();
 						return delivereyPromise;
 					}
 
@@ -3135,6 +3196,7 @@ export abstract class DirectStream<
 									stream,
 									message.bytes(),
 									message.header.priority,
+									signal,
 								),
 							);
 						}
@@ -3142,6 +3204,7 @@ export abstract class DirectStream<
 						if (promises.length > 0) {
 							await Promise.all(promises);
 						}
+						startDeliveryTimeout?.();
 						return delivereyPromise;
 					}
 				}
@@ -3155,6 +3218,7 @@ export abstract class DirectStream<
 				(peers instanceof Map && peers.size === 0)
 			) {
 				logger.trace("No peers to send to");
+				startDeliveryTimeout?.();
 				return delivereyPromise;
 			}
 
@@ -3177,9 +3241,12 @@ export abstract class DirectStream<
 					continue;
 				}
 				sentOnce = true;
-				promises.push(this.waitForPeerWrite(id, bytes, message.header.priority));
+				promises.push(
+					this.waitForPeerWrite(id, bytes, message.header.priority, signal),
+				);
 			}
 			await Promise.all(promises);
+			startDeliveryTimeout?.();
 
 			if (!sentOnce) {
 				// If the caller provided an explicit peer list, treat "no valid receivers" as an error

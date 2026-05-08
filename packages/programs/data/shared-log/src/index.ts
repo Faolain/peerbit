@@ -70,7 +70,7 @@ import {
 } from "@peerbit/time";
 import pDefer, { type DeferredPromise } from "p-defer";
 import PQueue from "p-queue";
-import { concat } from "uint8arrays";
+import { concat, fromString } from "uint8arrays";
 import { BlocksMessage } from "./blocks.js";
 import { type CPUUsage, CPUUsageIntervalLag } from "./cpu.js";
 import {
@@ -88,6 +88,7 @@ const getSharedLogFanoutService = (
 ): FanoutTree | undefined =>
 	(services as SharedLogServicesWithFanout).fanout;
 import {
+	EXCHANGE_HEADS_REPAIR_HINT,
 	EntryWithRefs,
 	ExchangeHeadsMessage,
 	RequestIPrune,
@@ -168,7 +169,7 @@ import type {
 	Syncronizer,
 } from "./sync/index.js";
 import { RatelessIBLTSynchronizer } from "./sync/rateless-iblt.js";
-import { SimpleSyncronizer } from "./sync/simple.js";
+import { ConfirmEntriesMessage, SimpleSyncronizer } from "./sync/simple.js";
 import { groupByGid } from "./utils.js";
 
 const toLocalPublicSignKey = (
@@ -239,6 +240,12 @@ export {
 export { MAX_U32, MAX_U64, type NumberFromType };
 export const logger = loggerFn("peerbit:shared-log");
 const warn = logger.newScope("warn");
+
+type CheckedPruneLeaderMap = Map<string, { intersecting: boolean }>;
+type CheckedPruneEntry<T, R extends "u32" | "u64"> =
+	| Entry<T>
+	| ShallowEntry
+	| EntryReplicated<R>;
 
 const getLatestEntry = (
 	entries: (ShallowOrFullEntry<any> | EntryWithRefs<any>)[],
@@ -468,6 +475,7 @@ export type SharedLogOptions<
 	waitForReplicatorRequestMaxAttempts?: number;
 	waitForPruneDelay?: number;
 	distributionDebounceTime?: number;
+	strictFullReplicaFallback?: boolean;
 	compatibility?: number;
 	domain?: ReplicationDomainConstructor<D>;
 	eagerBlocks?: boolean | { cacheSize?: number };
@@ -495,6 +503,7 @@ const RECALCULATE_PARTICIPATION_MIN_RELATIVE_CHANGE = 0.01;
 const RECALCULATE_PARTICIPATION_MIN_RELATIVE_CHANGE_WITH_CPU_LIMIT = 0.005;
 const RECALCULATE_PARTICIPATION_MIN_RELATIVE_CHANGE_WITH_MEMORY_LIMIT = 0.001;
 const RECALCULATE_PARTICIPATION_RELATIVE_DENOMINATOR_FLOOR = 1e-3;
+const TOPIC_SUBSCRIBERS_CACHE_TTL_MS = 250;
 const ADAPTIVE_REBALANCE_IDLE_INTERVAL_MULTIPLIER = 5;
 const ADAPTIVE_REBALANCE_MIN_IDLE_AFTER_LOCAL_APPEND_MS = 10_000;
 
@@ -512,10 +521,143 @@ const REPLICATOR_LIVENESS_PROBE_FAILURES_TO_EVICT = 2;
 // Churn/join repair can race with pruning and transient missed sync requests under
 // heavy event-loop load. Keep retries alive with a longer tail so reassigned
 // entries are retried after short bursts and slower recovery windows.
-const FORCE_FRESH_RETRY_SCHEDULE_MS = [
+const CHURN_REPAIR_RETRY_SCHEDULE_MS = [
 	0, 1_000, 3_000, 7_000, 15_000, 30_000, 45_000,
 ];
-const JOIN_WARMUP_RETRY_SCHEDULE_MS = [0, 1_000, 3_000, 7_000, 15_000];
+const JOIN_WARMUP_RETRY_SCHEDULE_MS = [
+	0,
+	1_000,
+	3_000,
+	7_000,
+	15_000,
+	30_000,
+	60_000,
+];
+const JOIN_AUTHORITATIVE_RETRY_SCHEDULE_MS = [
+	0,
+	1_000,
+	3_000,
+	7_000,
+	15_000,
+	30_000,
+	60_000,
+];
+const APPEND_BACKFILL_RETRY_SCHEDULE_MS = [0, 1_000, 3_000, 7_000];
+const JOIN_AUTHORITATIVE_REPAIR_DELAY_MS = 2_000;
+const JOIN_AUTHORITATIVE_REPAIR_SWEEP_DELAYS_MS = [
+	JOIN_AUTHORITATIVE_REPAIR_DELAY_MS,
+	7_000,
+	15_000,
+	30_000,
+];
+const APPEND_BACKFILL_DELAY_MS = 500;
+const ASSUME_SYNCED_REPAIR_SUPPRESSION_MS = 5_000;
+const REPAIR_CONFIRMATION_HASH_BATCH_SIZE = 1_024;
+
+type RepairDispatchMode =
+	| "join-warmup"
+	| "join-authoritative"
+	| "append-backfill"
+	| "churn";
+type RepairTransportMode = "rateless" | "simple";
+type RepairMetricBucket = {
+	dispatches: number;
+	entries: number;
+	ratelessFirstPasses: number;
+	simpleFallbackPasses: number;
+};
+type RepairMetrics = Record<RepairDispatchMode, RepairMetricBucket>;
+
+const REPAIR_DISPATCH_MODES: RepairDispatchMode[] = [
+	"join-warmup",
+	"join-authoritative",
+	"append-backfill",
+	"churn",
+];
+
+const createRepairMetricBucket = (): RepairMetricBucket => ({
+	dispatches: 0,
+	entries: 0,
+	ratelessFirstPasses: 0,
+	simpleFallbackPasses: 0,
+});
+
+const createRepairMetrics = (): RepairMetrics => ({
+	"join-warmup": createRepairMetricBucket(),
+	"join-authoritative": createRepairMetricBucket(),
+	"append-backfill": createRepairMetricBucket(),
+	churn: createRepairMetricBucket(),
+});
+
+const createRepairPendingPeersByMode = () =>
+	new Map<RepairDispatchMode, Set<string>>(
+		REPAIR_DISPATCH_MODES.map((mode) => [mode, new Set<string>()]),
+	);
+
+const cloneRepairPendingPeersByMode = (
+	pending: Map<RepairDispatchMode, Set<string>>,
+) =>
+	new Map<RepairDispatchMode, Set<string>>(
+		REPAIR_DISPATCH_MODES.map((mode) => [mode, new Set(pending.get(mode) ?? [])]),
+	);
+
+const createRepairFrontierByMode = () =>
+	new Map<
+		RepairDispatchMode,
+		Map<string, Map<string, EntryReplicated<any>>>
+	>(REPAIR_DISPATCH_MODES.map((mode) => [mode, new Map()]));
+
+const createRepairActiveTargetsByMode = () =>
+	new Map<RepairDispatchMode, Set<string>>(
+		REPAIR_DISPATCH_MODES.map((mode) => [mode, new Set()]),
+	);
+
+const getRepairRetrySchedule = (mode: RepairDispatchMode) => {
+	switch (mode) {
+		case "join-warmup":
+			return JOIN_WARMUP_RETRY_SCHEDULE_MS;
+		case "join-authoritative":
+			return JOIN_AUTHORITATIVE_RETRY_SCHEDULE_MS;
+		case "append-backfill":
+			return APPEND_BACKFILL_RETRY_SCHEDULE_MS;
+		case "churn":
+			return CHURN_REPAIR_RETRY_SCHEDULE_MS;
+	}
+};
+
+const resolveRepairRetrySchedule = (
+	mode: RepairDispatchMode,
+	override?: number[],
+	trackedFrontier = false,
+) => {
+	const fallback = getRepairRetrySchedule(mode);
+	if (!override || override.length === 0) {
+		return fallback;
+	}
+	if (
+		trackedFrontier &&
+		override.length === 1 &&
+		override[0] === 0 &&
+		fallback.length > 1
+	) {
+		// A tracked frontier with only an immediate retry would otherwise stay on
+		// attempt 0 forever, which means rateless-only retries and no sparse-tail
+		// simple fallback. Keep the immediate seed, then continue with the normal
+		// tracked repair schedule.
+		return [0, ...fallback.slice(1)];
+	}
+	return override;
+};
+
+const getRepairTransportForAttempt = (
+	mode: RepairDispatchMode,
+	attemptIndex: number,
+): RepairTransportMode => {
+	if (mode === "churn") {
+		return "simple";
+	}
+	return attemptIndex === 0 ? "rateless" : "simple";
+};
 
 const toPositiveInteger = (
 	value: number | undefined,
@@ -723,8 +865,8 @@ export class SharedLog<
 
 	// A fn for debouncing the calls for pruning
 	pruneDebouncedFn!: DebouncedAccumulatorMap<{
-		entry: Entry<T> | ShallowEntry | EntryReplicated<R>;
-		leaders: Map<string, any>;
+		entry: CheckedPruneEntry<T, R>;
+		leaders: CheckedPruneLeaderMap;
 	}>;
 	private responseToPruneDebouncedFn!: ReturnType<
 		typeof debounceAccumulator<
@@ -750,8 +892,28 @@ export class SharedLog<
 	private _repairRetryTimers!: Set<ReturnType<typeof setTimeout>>;
 	private _recentRepairDispatch!: Map<string, Map<string, number>>;
 	private _repairSweepRunning!: boolean;
-	private _repairSweepForceFreshPending!: boolean;
-	private _repairSweepAddedPeersPending!: Set<string>;
+	private _repairSweepPendingModes!: Set<RepairDispatchMode>;
+	private _repairSweepPendingPeersByMode!: Map<RepairDispatchMode, Set<string>>;
+	private _repairFrontierByMode!: Map<
+		RepairDispatchMode,
+		Map<string, Map<string, EntryReplicated<R>>>
+	>;
+	private _repairFrontierActiveTargetsByMode!: Map<RepairDispatchMode, Set<string>>;
+	private _repairSweepOptimisticGidPeersPending!: Map<string, Map<string, number>>;
+	private _entryKnownPeers!: Map<string, Set<string>>;
+	private _joinAuthoritativeRepairTimersByDelay!: Map<
+		number,
+		ReturnType<typeof setTimeout>
+	>;
+	private _joinAuthoritativeRepairPeersByDelay!: Map<number, Set<string>>;
+	private _assumeSyncedRepairSuppressedUntil!: number;
+	private _appendBackfillTimer?: ReturnType<typeof setTimeout>;
+	private _appendBackfillPendingByTarget!: Map<string, Map<string, EntryReplicated<R>>>;
+	private _repairMetrics!: RepairMetrics;
+	private _topicSubscribersCache!: Map<
+		string,
+		{ expiresAt: number; keys: PublicSignKey[] }
+	>;
 
 	// regular distribution checks
 	private distributeQueue?: PQueue;
@@ -1182,6 +1344,7 @@ export class SharedLog<
 
 		private async _appendDeliverToReplicators(
 			entry: Entry<T>,
+			coordinates: NumberFromType<R>[],
 			minReplicasValue: number,
 			leaders: Map<string, any>,
 			selfHash: string,
@@ -1199,11 +1362,35 @@ export class SharedLog<
 					? { timeoutMs: delivery.timeout, signal: delivery.signal }
 					: undefined;
 
+			const fullReplicaDeliveryCandidates =
+				await this.getFullReplicaRepairCandidates(undefined, {
+					includeSubscribers: false,
+				});
+			if (minReplicasValue >= Math.max(1, fullReplicaDeliveryCandidates.size)) {
+				for (const peer of fullReplicaDeliveryCandidates) {
+					if (!leaders.has(peer)) {
+						leaders.set(peer, { intersecting: true });
+					}
+				}
+			}
+
+			const entryReplicatedForRepair = this.createEntryReplicatedForRepair({
+				entry,
+				coordinates,
+				leaders: leaders as Map<string, { intersecting: boolean }>,
+				replicas: minReplicasValue,
+			});
 			for await (const message of createExchangeHeadsMessages(this.log, [entry])) {
 				await this._mergeLeadersFromGidReferences(message, minReplicasValue, leaders);
-				const leadersForDelivery = delivery ? new Set(leaders.keys()) : undefined;
+				const authoritativeRecipients = new Set(leaders.keys());
+				const leadersForDelivery = delivery
+					? new Set(authoritativeRecipients)
+					: undefined;
 
-				const set = this.addPeersToGidPeerHistory(entry.meta.gid, leaders.keys());
+				// Outbound append delivery only tells us who we intend to send to, not who has
+				// actually stored the entry. Keep this recipient set local so later repair
+				// sweeps can still backfill peers that missed the initial delivery.
+				const set = new Set(leaders.keys());
 				let hasRemotePeers = set.has(selfHash) ? set.size > 1 : set.size > 0;
 				const allowSubscriberFallback =
 					this.syncronizer instanceof SimpleSyncronizer ||
@@ -1234,6 +1421,17 @@ export class SharedLog<
 			}
 
 				if (!delivery) {
+					for (const peer of authoritativeRecipients) {
+						if (peer === selfHash) {
+							continue;
+						}
+						// Default live append delivery is still optimistic. If one remote misses
+						// the initial heads exchange and the caller did not opt into explicit
+						// delivery acks, we still need a targeted backfill source of truth for the
+						// authoritative recipients or one entry can get stuck at 2/3 replicas
+						// forever. Best-effort fallback subscribers are not repair-worthy.
+						this.queueAppendBackfill(peer, entryReplicatedForRepair);
+					}
 					this.rpc
 						.send(message, {
 							mode: isLeader
@@ -1263,6 +1461,7 @@ export class SharedLog<
 
 				const ackTo: string[] = [];
 				let silentTo: string[] | undefined;
+				const repairTargets = new Set<string>();
 				// Default delivery semantics: require enough remote ACKs to reach the requested
 				// replication degree (local append counts as 1).
 				const defaultMinAcks = Math.max(0, minReplicasValue - 1);
@@ -1274,6 +1473,9 @@ export class SharedLog<
 				);
 
 				for (const peer of orderedRemoteRecipients) {
+					if (authoritativeRecipients.has(peer)) {
+						repairTargets.add(peer);
+					}
 					if (ackTo.length < ackLimit) {
 						ackTo.push(peer);
 					} else {
@@ -1312,6 +1514,12 @@ export class SharedLog<
 					})
 					.catch((error) => logger.error(error));
 			}
+				for (const peer of repairTargets) {
+					// Direct append delivery is intentionally optimistic. Queue one delayed,
+					// batched maybe-sync pass for the intended recipients so stable 3-peer
+					// append workloads do not depend on perfect first-try delivery ordering.
+					this.queueAppendBackfill(peer, entryReplicatedForRepair);
+				}
 		}
 
 		if (pending.length > 0) {
@@ -1364,69 +1572,68 @@ export class SharedLog<
 	private async _getTopicSubscribers(
 		topic: string,
 	): Promise<PublicSignKey[] | undefined> {
-		const maxPeers = 64;
-
-		// Prefer the bounded peer set we already know from the fanout overlay.
-		if (this._fanoutChannel && (topic === this.topic || topic === this.rpc.topic)) {
-			const hashes = this._fanoutChannel
-				.getPeerHashes({ includeSelf: false })
-				.slice(0, maxPeers);
-			if (hashes.length === 0) return [];
-
-			const keys = await Promise.all(
-				hashes.map((hash) => this._resolvePublicKeyFromHash(hash)),
-			);
-			const uniqueKeys: PublicSignKey[] = [];
-			const seen = new Set<string>();
-			const selfHash = this.node.identity.publicKey.hashcode();
-			for (const key of keys) {
-				if (!key) continue;
-				const hash = key.hashcode();
-				if (hash === selfHash) continue;
-				if (seen.has(hash)) continue;
-				seen.add(hash);
-				uniqueKeys.push(key);
-			}
-			return uniqueKeys;
+		const cached = this._topicSubscribersCache.get(topic);
+		if (cached && cached.expiresAt > Date.now()) {
+			return cached.keys.slice();
 		}
+
+		const maxPeers = 64;
+		const cache = (keys: PublicSignKey[]) => {
+			this._topicSubscribersCache.set(topic, {
+				expiresAt: Date.now() + TOPIC_SUBSCRIBERS_CACHE_TTL_MS,
+				keys,
+			});
+			return keys.slice();
+		};
 
 		const selfHash = this.node.identity.publicKey.hashcode();
-		const hashes: string[] = [];
-
-		// Best-effort provider discovery (bounded). This requires bootstrap trackers.
-		try {
-			const fanoutService = getSharedLogFanoutService(this.node.services);
-			if (fanoutService?.queryProviders) {
-				const ns = `shared-log|${this.topic}`;
-				const seed = hashToSeed32(topic);
-				const providers: string[] = await fanoutService.queryProviders(ns, {
-					want: maxPeers,
-					seed,
-				});
-				for (const h of providers ?? []) {
-					if (!h || h === selfHash) continue;
-					hashes.push(h);
-					if (hashes.length >= maxPeers) break;
-				}
+		const hashes = new Set<string>();
+		const keysByHash = new Map<string, PublicSignKey>();
+		const addHash = (hash: string | undefined) => {
+			if (!hash || hash === selfHash || keysByHash.has(hash)) {
+				return;
 			}
-		} catch {
-			// Best-effort only.
+			hashes.add(hash);
+		};
+		const addKey = (key: PublicSignKey | undefined) => {
+			if (!key) {
+				return;
+			}
+			const hash = key.hashcode();
+			if (hash === selfHash) {
+				return;
+			}
+			hashes.delete(hash);
+			keysByHash.set(hash, key);
+		};
+
+		// Fanout is a useful hint, but it can lag direct pubsub connectivity. Keep
+		// collecting other local views instead of treating an empty fanout snapshot as
+		// authoritative absence.
+		if (this._fanoutChannel && (topic === this.topic || topic === this.rpc.topic)) {
+			for (const hash of this._fanoutChannel.getPeerHashes({
+				includeSelf: false,
+			})) {
+				addHash(hash);
+				if (hashes.size + keysByHash.size >= maxPeers) break;
+			}
 		}
 
-		// Next, use already-connected peer streams (bounded and cheap).
-		const peerMap: Map<string, unknown> | undefined = (this.node.services.pubsub as any)
-			?.peers;
-		if (peerMap?.keys) {
-			for (const h of peerMap.keys()) {
-				if (!h || h === selfHash) continue;
-				hashes.push(h);
-				if (hashes.length >= maxPeers) break;
+		// Already-connected peer streams are cheap and are the strongest local signal
+		// when fanout/provider membership is stale.
+		const peerMap: Map<string, { publicKey?: PublicSignKey }> | undefined = (this.node
+			.services.pubsub as any)?.peers;
+		if (peerMap?.entries) {
+			for (const [hash, peer] of peerMap.entries()) {
+				addKey(peer?.publicKey);
+				addHash(hash);
+				if (hashes.size + keysByHash.size >= maxPeers) break;
 			}
 		}
 
-		// Finally, fall back to libp2p connections (e.g. bootstrap peers) without requiring
-		// any global topic membership view.
-		if (hashes.length < maxPeers) {
+		// Libp2p connections cover bootstrap/direct peers even before a higher-level
+		// topic subscriber snapshot has converged.
+		if (hashes.size + keysByHash.size < maxPeers) {
 			const connectionManager = (this.node.services.pubsub as any)?.components
 				?.connectionManager;
 			const connections = connectionManager?.getConnections?.() ?? [];
@@ -1434,38 +1641,59 @@ export class SharedLog<
 				const peerId = conn?.remotePeer;
 				if (!peerId) continue;
 				try {
-					const h = getPublicKeyFromPeerId(peerId).hashcode();
-					if (!h || h === selfHash) continue;
-					hashes.push(h);
-					if (hashes.length >= maxPeers) break;
+					addKey(getPublicKeyFromPeerId(peerId));
+					if (hashes.size + keysByHash.size >= maxPeers) break;
 				} catch {
 					// Best-effort only.
 				}
 			}
 		}
 
-		if (hashes.length === 0) return [];
-
-		const uniqueHashes: string[] = [];
-		const seen = new Set<string>();
-		for (const h of hashes) {
-			if (seen.has(h)) continue;
-			seen.add(h);
-			uniqueHashes.push(h);
-			if (uniqueHashes.length >= maxPeers) break;
+		// Best-effort provider discovery (bounded). This requires bootstrap trackers.
+		if (hashes.size + keysByHash.size < maxPeers) {
+			try {
+				const fanoutService = getSharedLogFanoutService(this.node.services);
+				if (fanoutService?.queryProviders) {
+					const ns = `shared-log|${this.topic}`;
+					const seed = hashToSeed32(topic);
+					const providers: string[] = await fanoutService.queryProviders(ns, {
+						want: maxPeers - keysByHash.size - hashes.size,
+						seed,
+					});
+					for (const hash of providers ?? []) {
+						addHash(hash);
+						if (hashes.size + keysByHash.size >= maxPeers) break;
+					}
+				}
+			} catch {
+				// Best-effort only.
+			}
 		}
 
-		const keys = await Promise.all(
-			uniqueHashes.map((hash) => this._resolvePublicKeyFromHash(hash)),
+		if (hashes.size === 0 && keysByHash.size === 0) return cache([]);
+
+		const unresolvedHashes = [...hashes].slice(
+			0,
+			Math.max(0, maxPeers - keysByHash.size),
 		);
-		const uniqueKeys: PublicSignKey[] = [];
+		const keys = await Promise.all(
+			unresolvedHashes.map((hash) => this._resolvePublicKeyFromHash(hash)),
+		);
 		for (const key of keys) {
-			if (!key) continue;
-			const hash = key.hashcode();
-			if (hash === selfHash) continue;
-			uniqueKeys.push(key);
+			addKey(key);
 		}
-		return uniqueKeys;
+		return cache([...keysByHash.values()].slice(0, maxPeers));
+	}
+
+	private invalidateTopicSubscribersCache(...topics: (string | undefined)[]) {
+		for (const topic of topics) {
+			if (!topic) continue;
+			this._topicSubscribersCache.delete(topic);
+		}
+	}
+
+	private invalidateSharedLogTopicSubscribersCache() {
+		this.invalidateTopicSubscribersCache(this.topic, this.rpc.topic);
 	}
 
 	// @deprecated
@@ -1837,6 +2065,14 @@ export class SharedLog<
 			) => void;
 		},
 	) {
+		const entryRangeId = (entry: Entry<T>) =>
+			sha256Sync(
+				concat([
+					this.log.id,
+					fromString(entry.hash),
+					fromString(this.node.identity.publicKey.hashcode()),
+				]),
+			);
 		let range:
 			| ReplicationRangeMessage<any>[]
 			| ReplicationOptions<R>
@@ -1846,6 +2082,7 @@ export class SharedLog<
 			range = rangeOrEntry;
 		} else if (rangeOrEntry instanceof Entry) {
 			range = {
+				id: entryRangeId(rangeOrEntry),
 				factor: 1,
 				offset: await this.domain.fromEntry(rangeOrEntry),
 				normalized: false,
@@ -1856,6 +2093,7 @@ export class SharedLog<
 			for (const entry of rangeOrEntry) {
 				if (entry instanceof Entry) {
 					ranges.push({
+						id: entryRangeId(entry),
 						factor: 1,
 						offset: await this.domain.fromEntry(entry),
 						normalized: false,
@@ -1988,6 +2226,7 @@ export class SharedLog<
 		// Keep local sync/prune state consistent even when a peer disappears
 		// through replication-info updates without a topic unsubscribe event.
 		this.removePeerFromGidPeerHistory(keyHash);
+		this.removeRepairFrontierTarget(keyHash);
 		this._recentRepairDispatch.delete(keyHash);
 		if (!isMe) {
 			this.syncronizer.onPeerDisconnected(keyHash);
@@ -2455,6 +2694,7 @@ export class SharedLog<
 			for (const key of this._gidPeersHistory.keys()) {
 				this.removePeerFromGidPeerHistory(publicKeyHash, key);
 			}
+			this.removePeerFromEntryKnownPeers(publicKeyHash);
 		}
 	}
 
@@ -2479,13 +2719,250 @@ export class SharedLog<
 		return set;
 	}
 
-	private dispatchMaybeMissingEntries(
+	private markEntriesKnownByPeer(hashes: Iterable<string>, peer: string) {
+		for (const hash of hashes) {
+			let peers = this._entryKnownPeers.get(hash);
+			if (!peers) {
+				peers = new Set();
+				this._entryKnownPeers.set(hash, peers);
+			}
+			peers.add(peer);
+		}
+	}
+
+	private removeEntriesKnownByPeer(hashes: Iterable<string>, peer: string) {
+		for (const hash of hashes) {
+			const peers = this._entryKnownPeers.get(hash);
+			if (!peers) {
+				continue;
+			}
+			peers.delete(peer);
+			if (peers.size === 0) {
+				this._entryKnownPeers.delete(hash);
+			}
+		}
+	}
+
+	private removePeerFromEntryKnownPeers(peer: string) {
+		for (const [hash, peers] of this._entryKnownPeers) {
+			peers.delete(peer);
+			if (peers.size === 0) {
+				this._entryKnownPeers.delete(hash);
+			}
+		}
+	}
+
+	private isEntryKnownByPeer(hash: string, peer: string) {
+		return this._entryKnownPeers.get(hash)?.has(peer) === true;
+	}
+
+	private markRepairSweepOptimisticPeer(gid: string, peer: string) {
+		let peers = this._repairSweepOptimisticGidPeersPending.get(gid);
+		if (!peers) {
+			peers = new Map();
+			this._repairSweepOptimisticGidPeersPending.set(gid, peers);
+		}
+		peers.set(peer, (peers.get(peer) || 0) + 1);
+	}
+
+	private hasPendingRepairSweepOptimisticPeer(gid: string, peer: string) {
+		return (this._repairSweepOptimisticGidPeersPending.get(gid)?.get(peer) || 0) > 0;
+	}
+
+	private createEntryReplicatedForRepair(properties: {
+		entry: Entry<T>;
+		coordinates: NumberFromType<R>[];
+		leaders: Map<string, { intersecting: boolean }>;
+		replicas: number;
+	}) {
+		const assignedToRangeBoundary = shouldAssignToRangeBoundary(
+			properties.leaders,
+			properties.replicas,
+		);
+		const cidObject = cidifyString(properties.entry.hash);
+		const hashNumber = this.indexableDomain.numbers.bytesToNumber(
+			cidObject.multihash.digest,
+		);
+		return new this.indexableDomain.constructorEntry({
+			assignedToRangeBoundary,
+			coordinates: properties.coordinates,
+			meta: properties.entry.meta,
+			hash: properties.entry.hash,
+			hashNumber,
+		});
+	}
+
+	private isAssumeSyncedRepairSuppressed() {
+		return this._assumeSyncedRepairSuppressedUntil > Date.now();
+	}
+
+	private isFrontierTrackedRepairMode(mode: RepairDispatchMode) {
+		return mode !== "join-warmup";
+	}
+
+	private async sleepTracked(delayMs: number) {
+		if (delayMs <= 0) {
+			return;
+		}
+		await new Promise<void>((resolve) => {
+			const timer = setTimeout(() => {
+				this._repairRetryTimers.delete(timer);
+				resolve();
+			}, delayMs);
+			timer.unref?.();
+			this._repairRetryTimers.add(timer);
+		});
+	}
+
+	private queueRepairFrontierEntries(
+		mode: RepairDispatchMode,
 		target: string,
 		entries: Map<string, EntryReplicated<R>>,
-		options?: {
+	) {
+		let targets = this._repairFrontierByMode.get(mode);
+		if (!targets) {
+			targets = new Map();
+			this._repairFrontierByMode.set(mode, targets);
+		}
+		let pending = targets.get(target);
+		if (!pending) {
+			pending = new Map();
+			targets.set(target, pending);
+		}
+		for (const [hash, entry] of entries) {
+			pending.set(hash, entry);
+		}
+	}
+
+	private clearRepairFrontierHashes(target: string, hashes: Iterable<string>) {
+		const hashList = [...hashes];
+		if (hashList.length === 0) {
+			return;
+		}
+		for (const mode of REPAIR_DISPATCH_MODES) {
+			const pending = this._repairFrontierByMode.get(mode)?.get(target);
+			if (!pending) {
+				continue;
+			}
+			for (const hash of hashList) {
+				pending.delete(hash);
+			}
+			if (pending.size === 0) {
+				this._repairFrontierByMode.get(mode)?.delete(target);
+			}
+		}
+	}
+
+	private async getFullReplicaRepairCandidates(
+		extraPeers?: Iterable<string>,
+		options?: { includeSubscribers?: boolean },
+	) {
+		const candidates = new Set<string>([
+			this.node.identity.publicKey.hashcode(),
+		]);
+		try {
+			for (const peer of await this.getReplicators()) {
+				candidates.add(peer);
+			}
+		} catch {
+			for (const peer of this.uniqueReplicators) {
+				candidates.add(peer);
+			}
+		}
+		for (const peer of extraPeers ?? []) {
+			candidates.add(peer);
+		}
+		if (options?.includeSubscribers !== false) {
+			try {
+				for (const subscriber of (await this._getTopicSubscribers(this.topic)) ?? []) {
+					candidates.add(subscriber.hashcode());
+				}
+			} catch {
+				// Best-effort only; explicit repair peers still keep the path safe.
+			}
+		}
+		return candidates;
+	}
+
+	private removeRepairFrontierTarget(target: string) {
+		for (const mode of REPAIR_DISPATCH_MODES) {
+			this._repairFrontierByMode.get(mode)?.delete(target);
+			this._repairFrontierActiveTargetsByMode.get(mode)?.delete(target);
+		}
+	}
+
+	private async sendRepairConfirmation(
+		target: PublicSignKey,
+		hashes: Iterable<string>,
+	) {
+		const uniqueHashes = [...new Set(hashes)];
+		for (let i = 0; i < uniqueHashes.length; i += REPAIR_CONFIRMATION_HASH_BATCH_SIZE) {
+			const chunk = uniqueHashes.slice(
+				i,
+				i + REPAIR_CONFIRMATION_HASH_BATCH_SIZE,
+			);
+			await this.rpc.send(new ConfirmEntriesMessage({ hashes: chunk }), {
+				priority: 1,
+				mode: new SilentDelivery({ to: [target], redundancy: 1 }),
+			});
+		}
+	}
+
+	private async pushRepairEntries(
+		target: string,
+		entries: Map<string, EntryReplicated<R>>,
+	) {
+		for await (const message of createExchangeHeadsMessages(
+			this.log,
+			[...entries.keys()],
+		)) {
+			message.reserved[0] |= EXCHANGE_HEADS_REPAIR_HINT;
+			await this.rpc.send(message, {
+				priority: 1,
+				mode: new SilentDelivery({ to: [target], redundancy: 1 }),
+			});
+		}
+	}
+
+	private async sendRepairEntriesWithTransport(
+		target: string,
+		entries: Map<string, EntryReplicated<R>>,
+		transport: RepairTransportMode,
+		options?: { bypassKnownPeers?: boolean },
+	) {
+		const unknownEntries = new Map<string, EntryReplicated<R>>();
+		const knownHashes: string[] = [];
+		for (const [hash, entry] of entries) {
+			if (options?.bypassKnownPeers || !this.isEntryKnownByPeer(hash, target)) {
+				unknownEntries.set(hash, entry);
+			} else {
+				knownHashes.push(hash);
+			}
+		}
+		this.clearRepairFrontierHashes(target, knownHashes);
+		if (unknownEntries.size === 0) {
+			return;
+		}
+		if (transport === "simple") {
+			// Fallback repair should not depend on the target completing the
+			// RequestMaybeSync -> ResponseMaybeSync round trip.
+			await this.pushRepairEntries(target, unknownEntries);
+			return;
+		}
+
+		await this.syncronizer.onMaybeMissingEntries({
+			entries: unknownEntries,
+			targets: [target],
+		});
+	}
+
+	private async sendMaybeMissingEntriesNow(
+		target: string,
+		entries: Map<string, EntryReplicated<R>>,
+		options: {
+			mode: RepairDispatchMode;
+			transport: RepairTransportMode;
 			bypassRecentDedupe?: boolean;
-			retryScheduleMs?: number[];
-			forceFreshDelivery?: boolean;
 		},
 	) {
 		if (entries.size === 0) {
@@ -2505,10 +2982,10 @@ export class SharedLog<
 		}
 
 		const filteredEntries =
-			options?.bypassRecentDedupe === true
+			options.bypassRecentDedupe === true
 				? new Map(entries)
 				: new Map<string, EntryReplicated<any>>();
-		if (options?.bypassRecentDedupe !== true) {
+		if (options.bypassRecentDedupe !== true) {
 			for (const [hash, entry] of entries) {
 				const prev = recentlyDispatchedByHash.get(hash);
 				if (prev != null && now - prev <= RECENT_REPAIR_DISPATCH_TTL_MS) {
@@ -2525,64 +3002,262 @@ export class SharedLog<
 		if (filteredEntries.size === 0) {
 			return;
 		}
-		const retrySchedule =
-			options?.retryScheduleMs && options.retryScheduleMs.length > 0
-				? options.retryScheduleMs
-				: options?.forceFreshDelivery
-					? FORCE_FRESH_RETRY_SCHEDULE_MS
-					: [0];
 
-		const run = () => {
-			// For force-fresh churn repair we intentionally bypass rateless IBLT and
-			// use simple hash-based sync. This path is a directed "push these hashes
-			// to that peer" recovery flow; using simple sync here avoids occasional
-			// single-hash gaps seen with IBLT-oriented maybe-sync batches under churn.
-			if (
-				options?.forceFreshDelivery &&
-				this.syncronizer instanceof RatelessIBLTSynchronizer
-			) {
-				return Promise.resolve(
-					this.syncronizer.simple.onMaybeMissingEntries({
-						entries: filteredEntries,
-						targets: [target],
-					}),
-				).catch((error: any) => logger.error(error));
+		const bucket = this._repairMetrics[options.mode];
+		bucket.dispatches += 1;
+		bucket.entries += filteredEntries.size;
+		if (options.transport === "simple") {
+			bucket.simpleFallbackPasses += 1;
+		} else {
+			bucket.ratelessFirstPasses += 1;
+		}
+
+		await Promise.resolve(
+			this.sendRepairEntriesWithTransport(
+				target,
+				filteredEntries,
+				options.transport,
+				{ bypassKnownPeers: options.mode === "churn" },
+			),
+		).catch((error: any) => logger.error(error));
+	}
+
+	private ensureRepairFrontierRunner(
+		mode: RepairDispatchMode,
+		target: string,
+		retryScheduleMs?: number[],
+	) {
+		const activeTargets = this._repairFrontierActiveTargetsByMode.get(mode);
+		if (!activeTargets || activeTargets.has(target) || this.closed) {
+			return;
+		}
+		activeTargets.add(target);
+		const retrySchedule = resolveRepairRetrySchedule(
+			mode,
+			retryScheduleMs,
+			this.isFrontierTrackedRepairMode(mode),
+		);
+		const steadyStateDelay =
+			retrySchedule.length > 1
+				? Math.max(1, retrySchedule[retrySchedule.length - 1] - retrySchedule[retrySchedule.length - 2])
+				: Math.max(retrySchedule[0] || 1_000, 1_000);
+
+		void (async () => {
+			let attemptIndex = 0;
+			try {
+				for (;;) {
+					if (this.closed) {
+						return;
+					}
+					const pending = this._repairFrontierByMode.get(mode)?.get(target);
+					if (!pending || pending.size === 0) {
+						return;
+					}
+
+					if (
+						(mode === "join-warmup" || mode === "join-authoritative") &&
+						this.isAssumeSyncedRepairSuppressed()
+					) {
+						await this.sleepTracked(
+							Math.max(250, this._assumeSyncedRepairSuppressedUntil - Date.now()),
+						);
+						continue;
+					}
+
+					await this.sendMaybeMissingEntriesNow(target, pending, {
+						mode,
+						transport: getRepairTransportForAttempt(mode, attemptIndex),
+						bypassRecentDedupe: true,
+					});
+
+					const remaining = this._repairFrontierByMode.get(mode)?.get(target);
+					if (!remaining || remaining.size === 0) {
+						return;
+					}
+
+					const waitMs =
+						attemptIndex + 1 < retrySchedule.length
+							? Math.max(0, retrySchedule[attemptIndex + 1] - retrySchedule[attemptIndex])
+							: steadyStateDelay;
+					attemptIndex = Math.min(attemptIndex + 1, retrySchedule.length - 1);
+					await this.sleepTracked(waitMs);
+				}
+			} finally {
+				activeTargets.delete(target);
+				if (
+					!this.closed &&
+					(this._repairFrontierByMode.get(mode)?.get(target)?.size || 0) > 0
+				) {
+					this.ensureRepairFrontierRunner(mode, target, retryScheduleMs);
+				}
+			}
+		})().catch((error: any) => {
+			activeTargets.delete(target);
+			logger.error(error);
+		});
+	}
+
+	private flushAppendBackfill() {
+		if (this._appendBackfillPendingByTarget.size === 0) {
+			return;
+		}
+		const pending = this._appendBackfillPendingByTarget;
+		this._appendBackfillPendingByTarget = new Map();
+		for (const [target, entries] of pending) {
+			this.dispatchMaybeMissingEntries(target, entries, {
+				mode: "append-backfill",
+			});
+		}
+	}
+
+	private queueAppendBackfill(target: string, entry: EntryReplicated<R>) {
+		let entries = this._appendBackfillPendingByTarget.get(target);
+		if (!entries) {
+			entries = new Map();
+			this._appendBackfillPendingByTarget.set(target, entries);
+		}
+		entries.set(entry.hash, entry);
+		if (entries.size >= this.repairSweepTargetBufferSize) {
+			this.flushAppendBackfill();
+			return;
+		}
+		if (this._appendBackfillTimer || this.closed) {
+			return;
+		}
+		const timer = setTimeout(() => {
+			this._repairRetryTimers.delete(timer);
+			if (this._appendBackfillTimer === timer) {
+				this._appendBackfillTimer = undefined;
+			}
+			if (this.closed) {
+				return;
+			}
+			this.flushAppendBackfill();
+		}, APPEND_BACKFILL_DELAY_MS);
+		timer.unref?.();
+		this._repairRetryTimers.add(timer);
+		this._appendBackfillTimer = timer;
+	}
+
+	private dispatchMaybeMissingEntries(
+		target: string,
+		entries: Map<string, EntryReplicated<R>>,
+		options: {
+			mode: RepairDispatchMode;
+			bypassRecentDedupe?: boolean;
+			retryScheduleMs?: number[];
+		},
+	) {
+		if (entries.size === 0) {
+			return;
+		}
+
+		if (this.isFrontierTrackedRepairMode(options.mode)) {
+			this.queueRepairFrontierEntries(options.mode, target, entries);
+			this.ensureRepairFrontierRunner(
+				options.mode,
+				target,
+				options.retryScheduleMs,
+			);
+			return;
+		}
+
+		const now = Date.now();
+		let recentlyDispatchedByHash = this._recentRepairDispatch.get(target);
+		if (!recentlyDispatchedByHash) {
+			recentlyDispatchedByHash = new Map();
+			this._recentRepairDispatch.set(target, recentlyDispatchedByHash);
+		}
+		for (const [hash, ts] of recentlyDispatchedByHash) {
+			if (now - ts > RECENT_REPAIR_DISPATCH_TTL_MS) {
+				recentlyDispatchedByHash.delete(hash);
+			}
+		}
+
+		const filteredEntries =
+			options.bypassRecentDedupe === true
+				? new Map(entries)
+				: new Map<string, EntryReplicated<any>>();
+		if (options.bypassRecentDedupe !== true) {
+			for (const [hash, entry] of entries) {
+				const prev = recentlyDispatchedByHash.get(hash);
+				if (prev != null && now - prev <= RECENT_REPAIR_DISPATCH_TTL_MS) {
+					continue;
+				}
+				recentlyDispatchedByHash.set(hash, now);
+				filteredEntries.set(hash, entry);
+			}
+		} else {
+			for (const hash of entries.keys()) {
+				recentlyDispatchedByHash.set(hash, now);
+			}
+		}
+		if (filteredEntries.size === 0) {
+			return;
+		}
+
+		if (
+			(options.mode === "join-warmup" ||
+				options.mode === "join-authoritative") &&
+			this.isAssumeSyncedRepairSuppressed()
+		) {
+			return;
+		}
+
+		const retrySchedule = resolveRepairRetrySchedule(
+			options.mode,
+			options.retryScheduleMs,
+			this.isFrontierTrackedRepairMode(options.mode),
+		);
+		const bucket = this._repairMetrics[options.mode];
+		bucket.dispatches += 1;
+		bucket.entries += filteredEntries.size;
+
+		const run = (transport: RepairTransportMode) => {
+			if (transport === "simple") {
+				bucket.simpleFallbackPasses += 1;
+			} else {
+				bucket.ratelessFirstPasses += 1;
 			}
 
 			return Promise.resolve(
-				this.syncronizer.onMaybeMissingEntries({
-					entries: filteredEntries,
-					targets: [target],
-				}),
+				this.sendRepairEntriesWithTransport(
+					target,
+					filteredEntries,
+					transport,
+					{ bypassKnownPeers: options.mode === "churn" },
+				),
 			).catch((error: any) => logger.error(error));
 		};
 
-		for (const delayMs of retrySchedule) {
+		retrySchedule.forEach((delayMs, index) => {
+			const transport = getRepairTransportForAttempt(options.mode, index);
 			if (delayMs === 0) {
-				void run();
-				continue;
+				void run(transport);
+				return;
 			}
 			const timer = setTimeout(() => {
 				this._repairRetryTimers.delete(timer);
 				if (this.closed) {
 					return;
 				}
-				void run();
+				void run(transport);
 			}, delayMs);
 			timer.unref?.();
 			this._repairRetryTimers.add(timer);
-		}
+		});
 	}
 
 	private scheduleRepairSweep(options: {
-		forceFreshDelivery: boolean;
-		addedPeers: Set<string>;
+		mode: RepairDispatchMode;
+		peers?: Iterable<string>;
 	}) {
-		if (options.forceFreshDelivery) {
-			this._repairSweepForceFreshPending = true;
-		}
-		for (const peer of options.addedPeers) {
-			this._repairSweepAddedPeersPending.add(peer);
+		this._repairSweepPendingModes.add(options.mode);
+		const pendingPeers = this._repairSweepPendingPeersByMode.get(options.mode);
+		if (pendingPeers) {
+			for (const peer of options.peers ?? []) {
+				pendingPeers.add(peer);
+			}
 		}
 		if (!this._repairSweepRunning && !this.closed) {
 			this._repairSweepRunning = true;
@@ -2590,50 +3265,171 @@ export class SharedLog<
 		}
 	}
 
-	private async runRepairSweep() {
-		try {
-			while (!this.closed) {
-				const forceFreshDelivery = this._repairSweepForceFreshPending;
-				const addedPeers = new Set(this._repairSweepAddedPeersPending);
-				this._repairSweepForceFreshPending = false;
-				this._repairSweepAddedPeersPending.clear();
+	private scheduleJoinAuthoritativeRepair(peers: Set<string>) {
+		if (this.closed || peers.size === 0) {
+			return;
+		}
 
-				if (!forceFreshDelivery && addedPeers.size === 0) {
+		for (const delayMs of JOIN_AUTHORITATIVE_REPAIR_SWEEP_DELAYS_MS) {
+			let pendingPeers = this._joinAuthoritativeRepairPeersByDelay.get(delayMs);
+			if (!pendingPeers) {
+				pendingPeers = new Set();
+				this._joinAuthoritativeRepairPeersByDelay.set(delayMs, pendingPeers);
+			}
+			for (const peer of peers) {
+				pendingPeers.add(peer);
+			}
+
+			if (this._joinAuthoritativeRepairTimersByDelay.has(delayMs)) {
+				continue;
+			}
+
+			const timer = setTimeout(() => {
+				this._repairRetryTimers.delete(timer);
+				this._joinAuthoritativeRepairTimersByDelay.delete(delayMs);
+				if (this.closed) {
 					return;
 				}
 
-				const pendingByTarget = new Map<string, Map<string, EntryReplicated<any>>>();
-				const flushTarget = (target: string) => {
-					const entries = pendingByTarget.get(target);
+				const peersForSweep = new Set(
+					this._joinAuthoritativeRepairPeersByDelay.get(delayMs) ?? [],
+				);
+				this._joinAuthoritativeRepairPeersByDelay.delete(delayMs);
+				if (peersForSweep.size === 0) {
+					return;
+				}
+
+				// A joiner's leader view can still be partial on the first delayed pass
+				// under pubsub jitter. Bounded per-peer rescans widen the authoritative
+				// frontier without adding per-append sweeps.
+				this.scheduleRepairSweep({
+					mode: "join-authoritative",
+					peers: peersForSweep,
+				});
+			}, delayMs);
+			timer.unref?.();
+			this._repairRetryTimers.add(timer);
+			this._joinAuthoritativeRepairTimersByDelay.set(delayMs, timer);
+		}
+	}
+
+	private async runRepairSweep() {
+		try {
+			while (!this.closed) {
+				const pendingModes = new Set(this._repairSweepPendingModes);
+				const pendingPeersByMode = cloneRepairPendingPeersByMode(
+					this._repairSweepPendingPeersByMode,
+				);
+				this._repairSweepPendingModes.clear();
+				for (const peers of this._repairSweepPendingPeersByMode.values()) {
+					peers.clear();
+				}
+
+				if (pendingModes.size === 0) {
+					return;
+				}
+
+				const optimisticGidPeersByMode = new Map<
+					RepairDispatchMode,
+					Map<string, Set<string>>
+				>();
+				const optimisticGidPeersConsumedByMode = new Map<
+					RepairDispatchMode,
+					Map<string, Map<string, number>>
+				>();
+				for (const mode of pendingModes) {
+					const modePeers = pendingPeersByMode.get(mode);
+					if (!modePeers || modePeers.size === 0) {
+						continue;
+					}
+					const optimisticGidPeers = new Map<string, Set<string>>();
+					const optimisticGidPeersConsumed = new Map<string, Map<string, number>>();
+					for (const [gid, peerCounts] of this._repairSweepOptimisticGidPeersPending) {
+						let matchedPeers: Set<string> | undefined;
+						let matchedCounts: Map<string, number> | undefined;
+						for (const [peer, count] of peerCounts) {
+							if (!modePeers.has(peer)) {
+								continue;
+							}
+							matchedPeers ||= new Set();
+							matchedCounts ||= new Map();
+							matchedPeers.add(peer);
+							matchedCounts.set(peer, count);
+						}
+						if (matchedPeers && matchedCounts) {
+							optimisticGidPeers.set(gid, matchedPeers);
+							optimisticGidPeersConsumed.set(gid, matchedCounts);
+						}
+					}
+					if (optimisticGidPeers.size > 0) {
+						optimisticGidPeersByMode.set(mode, optimisticGidPeers);
+						optimisticGidPeersConsumedByMode.set(mode, optimisticGidPeersConsumed);
+					}
+				}
+
+				const pendingByMode = new Map<
+					RepairDispatchMode,
+					Map<string, Map<string, EntryReplicated<any>>>
+				>(REPAIR_DISPATCH_MODES.map((mode) => [mode, new Map()]));
+				const pendingRepairPeers = new Set<string>();
+				for (const peers of pendingPeersByMode.values()) {
+					for (const peer of peers) {
+						pendingRepairPeers.add(peer);
+					}
+				}
+				const fullReplicaRepairCandidates =
+					await this.getFullReplicaRepairCandidates(pendingRepairPeers, {
+						includeSubscribers: false,
+					});
+				const fullReplicaRepairCandidateCount = Math.max(
+					1,
+					fullReplicaRepairCandidates.size,
+				);
+				const nextFrontierByMode = new Map<
+					RepairDispatchMode,
+					Map<string, Map<string, EntryReplicated<any>>>
+				>([
+					["join-authoritative", new Map()],
+					["churn", new Map()],
+				]);
+				const flushTarget = (mode: RepairDispatchMode, target: string) => {
+					const targets = pendingByMode.get(mode);
+					const entries = targets?.get(target);
 					if (!entries || entries.size === 0) {
 						return;
 					}
-					const isJoinWarmupTarget = addedPeers.has(target);
-					const bypassRecentDedupe = isJoinWarmupTarget || forceFreshDelivery;
 					this.dispatchMaybeMissingEntries(target, entries, {
-						bypassRecentDedupe,
-						retryScheduleMs: isJoinWarmupTarget
-							? JOIN_WARMUP_RETRY_SCHEDULE_MS
-							: undefined,
-						forceFreshDelivery,
+						bypassRecentDedupe: true,
+						mode,
 					});
-					pendingByTarget.delete(target);
+					targets?.delete(target);
 				};
 				const queueEntryForTarget = (
+					mode: RepairDispatchMode,
 					target: string,
 					entry: EntryReplicated<any>,
 				) => {
-					let set = pendingByTarget.get(target);
+					const sweepTargets = nextFrontierByMode.get(mode);
+					if (sweepTargets) {
+						let sweepSet = sweepTargets.get(target);
+						if (!sweepSet) {
+							sweepSet = new Map();
+							sweepTargets.set(target, sweepSet);
+						}
+						sweepSet.set(entry.hash, entry);
+					}
+					const targets = pendingByMode.get(mode)!;
+					let set = targets.get(target);
 					if (!set) {
 						set = new Map();
-						pendingByTarget.set(target, set);
+						targets.set(target, set);
 					}
 					if (set.has(entry.hash)) {
 						return;
 					}
 					set.set(entry.hash, entry);
 					if (set.size >= this.repairSweepTargetBufferSize) {
-						flushTarget(target);
+						flushTarget(mode, target);
 					}
 				};
 
@@ -2643,23 +3439,52 @@ export class SharedLog<
 						const entries = await iterator.next(REPAIR_SWEEP_ENTRY_BATCH_SIZE);
 						for (const entry of entries) {
 							const entryReplicated = entry.value;
+							const gid = entryReplicated.gid;
+							const knownPeers = this._gidPeersHistory.get(gid);
+							const requestedReplicas =
+								decodeReplicas(entryReplicated).getValue(this);
 							const currentPeers = await this.findLeaders(
 								entryReplicated.coordinates,
 								entryReplicated,
 								{ roleAge: 0 },
 							);
-							if (forceFreshDelivery) {
+
+							if (pendingModes.has("churn")) {
 								for (const [currentPeer] of currentPeers) {
 									if (currentPeer === this.node.identity.publicKey.hashcode()) {
 										continue;
 									}
-									queueEntryForTarget(currentPeer, entryReplicated);
+									queueEntryForTarget("churn", currentPeer, entryReplicated);
 								}
 							}
-							if (addedPeers.size > 0) {
-								for (const peer of addedPeers) {
-									if (currentPeers.has(peer)) {
-										queueEntryForTarget(peer, entryReplicated);
+
+							for (const mode of pendingModes) {
+								const modePeers = pendingPeersByMode.get(mode);
+								if (!modePeers || modePeers.size === 0) {
+									continue;
+								}
+								const optimisticPeers = optimisticGidPeersByMode.get(mode)?.get(gid);
+								for (const peer of modePeers) {
+									if (this.isEntryKnownByPeer(entryReplicated.hash, peer)) {
+										continue;
+									}
+									const wasOptimisticallyAssigned =
+										optimisticPeers?.has(peer) === true;
+									const isCoveredByFullReplicaRepair =
+										mode === "join-authoritative" &&
+										fullReplicaRepairCandidates.has(peer) &&
+										requestedReplicas >= fullReplicaRepairCandidateCount;
+									const shouldQueue =
+										mode === "join-authoritative"
+											? currentPeers.has(peer) || isCoveredByFullReplicaRepair
+											: wasOptimisticallyAssigned ||
+											  (currentPeers.has(peer) && !knownPeers?.has(peer));
+									if (shouldQueue) {
+										// Authoritative join repair must not trust partial gid peer history,
+										// otherwise a late joiner can get stuck with a partial historical
+										// backfill forever. Once we enter the authoritative pass, queue every
+										// entry whose current leader set still includes the added peer.
+										queueEntryForTarget(mode, peer, entryReplicated);
 									}
 								}
 							}
@@ -2669,8 +3494,56 @@ export class SharedLog<
 					await iterator.close();
 				}
 
-				for (const target of [...pendingByTarget.keys()]) {
-					flushTarget(target);
+				for (const [, optimisticGidPeersConsumed] of optimisticGidPeersConsumedByMode) {
+					for (const [gid, peerCounts] of optimisticGidPeersConsumed) {
+						const pendingPeerCounts =
+							this._repairSweepOptimisticGidPeersPending.get(gid);
+						if (!pendingPeerCounts) {
+							continue;
+						}
+						for (const [peer, count] of peerCounts) {
+							const current = pendingPeerCounts.get(peer) || 0;
+							const next = current - count;
+							if (next > 0) {
+								pendingPeerCounts.set(peer, next);
+							} else {
+								pendingPeerCounts.delete(peer);
+							}
+						}
+						if (pendingPeerCounts.size === 0) {
+							this._repairSweepOptimisticGidPeersPending.delete(gid);
+						}
+					}
+				}
+
+				for (const mode of pendingModes) {
+					if (mode !== "join-authoritative" && mode !== "churn") {
+						continue;
+					}
+					const nextTargets = nextFrontierByMode.get(mode) ?? new Map();
+					const frontierTargets = this._repairFrontierByMode.get(mode);
+					for (const target of pendingPeersByMode.get(mode) ?? []) {
+						const replacement = nextTargets.get(target);
+						// These repairs are receipt-driven: a later sweep can have a narrower
+						// transient leader view, but it must not forget unconfirmed hashes
+						// that were already queued for this target.
+						if (replacement && replacement.size > 0) {
+							const existing = frontierTargets?.get(target);
+							if (existing && existing.size > 0) {
+								for (const [hash, entry] of replacement) {
+									existing.set(hash, entry);
+								}
+							} else {
+								frontierTargets?.set(target, replacement);
+							}
+						}
+					}
+				}
+
+				for (const [mode, targets] of pendingByMode) {
+					for (const target of [...targets.keys()]) {
+						flushTarget(mode, target);
+					}
 				}
 			}
 		} catch (error: any) {
@@ -2679,11 +3552,7 @@ export class SharedLog<
 			}
 		} finally {
 			this._repairSweepRunning = false;
-			if (
-				!this.closed &&
-				(this._repairSweepForceFreshPending ||
-					this._repairSweepAddedPeersPending.size > 0)
-			) {
+			if (!this.closed && this._repairSweepPendingModes.size > 0) {
 				this._repairSweepRunning = true;
 				void this.runRepairSweep();
 			}
@@ -2693,12 +3562,165 @@ export class SharedLog<
 	private async pruneDebouncedFnAddIfNotKeeping(args: {
 		key: string;
 		value: {
-			entry: Entry<T> | ShallowEntry | EntryReplicated<R>;
-			leaders: Map<string, any>;
+			entry: CheckedPruneEntry<T, R>;
+			leaders: CheckedPruneLeaderMap;
 		};
-	}) {
-		if (!this.keep || !(await this.keep(args.value.entry))) {
-			return this.pruneDebouncedFn.add(args);
+	}): Promise<boolean> {
+		if (this.keep && (await this.keep(args.value.entry))) {
+			return false;
+		}
+		void this.pruneDebouncedFn.add(args);
+		return true;
+	}
+
+	private async cancelCheckedPruneForLocalLeader(hash: string) {
+		this.pruneDebouncedFn.delete(hash);
+		this.clearCheckedPruneRetry(hash);
+		this.removePruneRequestSent(hash);
+		this._requestIPruneResponseReplicatorSet.delete(hash);
+		await this._pendingDeletes
+			.get(hash)
+			?.reject(new Error("Failed to delete, is leader again"));
+	}
+
+	private hasActiveCheckedPruneWork(hash: string) {
+		return (
+			this._pendingDeletes.has(hash) ||
+			this._requestIPruneSent.has(hash) ||
+			this._requestIPruneResponseReplicatorSet.has(hash) ||
+			this._checkedPruneRetries.has(hash)
+		);
+	}
+
+	private async resolveCheckedPruneLeaders(args: {
+		hash: string;
+		entry: CheckedPruneEntry<T, R>;
+		leaders: CheckedPruneLeaderMap;
+		selfReplicating?: boolean;
+	}): Promise<{
+		leaders: CheckedPruneLeaderMap;
+		localLeader: boolean;
+	}> {
+		const selfHash = this.node.identity.publicKey.hashcode();
+		if (args.leaders.has(selfHash)) {
+			if (args.selfReplicating === false) {
+				return { leaders: args.leaders, localLeader: false };
+			}
+			if (args.selfReplicating == null && !(await this.isReplicating())) {
+				return { leaders: args.leaders, localLeader: false };
+			}
+			return { leaders: args.leaders, localLeader: true };
+		}
+
+		if (!this.hasActiveCheckedPruneWork(args.hash)) {
+			return { leaders: args.leaders, localLeader: false };
+		}
+
+		if (args.selfReplicating === false) {
+			return { leaders: args.leaders, localLeader: false };
+		}
+		if (args.selfReplicating == null && !(await this.isReplicating())) {
+			return { leaders: args.leaders, localLeader: false };
+		}
+
+		try {
+			const currentLeaders = await this.findLeadersFromEntry(
+				args.entry,
+				decodeReplicas(args.entry).getValue(this),
+			);
+			if (currentLeaders.size > 0) {
+				return {
+					leaders: currentLeaders,
+					localLeader: currentLeaders.has(selfHash),
+				};
+			}
+		} catch {
+			// Best-effort only. If the fresh check fails, keep the original prune
+			// decision instead of hiding a legitimately prunable entry.
+		}
+
+		return { leaders: args.leaders, localLeader: false };
+	}
+
+	private async pruneJoinedEntriesNoLongerLed(entries: Entry<T>[]) {
+		const selfHash = this.node.identity.publicKey.hashcode();
+		for (const entry of entries) {
+			if (this.closed) {
+				continue;
+			}
+
+			const leaders = await this.findLeadersFromEntry(
+				entry,
+				decodeReplicas(entry).getValue(this),
+				{ roleAge: 0 },
+			);
+
+			if (leaders.has(selfHash)) {
+				await this.cancelCheckedPruneForLocalLeader(entry.hash);
+				continue;
+			}
+
+			if (this._pendingDeletes.has(entry.hash)) {
+				continue;
+			}
+
+			if (leaders.size === 0) {
+				continue;
+			}
+
+			await this.pruneDebouncedFnAddIfNotKeeping({
+				key: entry.hash,
+				value: { entry, leaders },
+			});
+			this.responseToPruneDebouncedFn.delete(entry.hash);
+		}
+	}
+
+	private async pruneIndexedEntriesNoLongerLed() {
+		const selfHash = this.node.identity.publicKey.hashcode();
+		const iterator = this.entryCoordinatesIndex.iterate({});
+		let enqueuedPrune = false;
+		try {
+			while (!this.closed && !iterator.done()) {
+				const entries = await iterator.next(REPAIR_SWEEP_ENTRY_BATCH_SIZE);
+				for (const entry of entries) {
+					const entryReplicated = entry.value;
+					if (this.closed) {
+						continue;
+					}
+
+					const leaders = await this.findLeaders(
+						entryReplicated.coordinates,
+						entryReplicated,
+						{ roleAge: 0 },
+					);
+
+					if (leaders.has(selfHash)) {
+						await this.cancelCheckedPruneForLocalLeader(entryReplicated.hash);
+						continue;
+					}
+
+					if (this._pendingDeletes.has(entryReplicated.hash)) {
+						continue;
+					}
+
+					if (leaders.size === 0) {
+						continue;
+					}
+
+					enqueuedPrune =
+						(await this.pruneDebouncedFnAddIfNotKeeping({
+							key: entryReplicated.hash,
+							value: { entry: entryReplicated, leaders },
+						})) || enqueuedPrune;
+					this.responseToPruneDebouncedFn.delete(entryReplicated.hash);
+				}
+			}
+		} finally {
+			await iterator.close();
+		}
+		if (enqueuedPrune && !this.closed) {
+			await this.pruneDebouncedFn.flush();
 		}
 	}
 
@@ -2711,8 +3733,8 @@ export class SharedLog<
 	}
 
 	private scheduleCheckedPruneRetry(args: {
-		entry: EntryReplicated<R> | ShallowOrFullEntry<any>;
-		leaders: Map<string, unknown> | Set<string>;
+		entry: CheckedPruneEntry<T, R>;
+		leaders: CheckedPruneLeaderMap | Set<string>;
 	}) {
 		if (this.closed) return;
 		if (this._pendingDeletes.has(args.entry.hash)) return;
@@ -2742,7 +3764,7 @@ export class SharedLog<
 			if (this.closed) return;
 			if (this._pendingDeletes.has(hash)) return;
 
-			let leadersMap: Map<string, any> | undefined;
+			let leadersMap: CheckedPruneLeaderMap | undefined;
 			try {
 				const replicas = decodeReplicas(args.entry).getValue(this);
 				leadersMap = await this.findLeadersFromEntry(args.entry, replicas, {
@@ -2752,27 +3774,27 @@ export class SharedLog<
 				// Best-effort only.
 			}
 
-				if (!leadersMap || leadersMap.size === 0) {
-					if (args.leaders instanceof Map) {
-						leadersMap = args.leaders as any;
-					} else {
-						leadersMap = new Map<string, any>();
-						for (const k of args.leaders) {
-							leadersMap.set(k, { intersecting: true });
-						}
+			if (!leadersMap || leadersMap.size === 0) {
+				if (args.leaders instanceof Map) {
+					leadersMap = args.leaders;
+				} else {
+					leadersMap = new Map<string, { intersecting: boolean }>();
+					for (const k of args.leaders) {
+						leadersMap.set(k, { intersecting: true });
 					}
 				}
+			}
 
-				try {
-					const leadersForRetry = leadersMap ?? new Map<string, any>();
-					await this.pruneDebouncedFnAddIfNotKeeping({
-						key: hash,
-						// TODO types
-						value: { entry: args.entry as any, leaders: leadersForRetry },
-					});
-				} catch {
-					// Best-effort only; pruning will be re-attempted on future changes.
-				}
+			try {
+				const leadersForRetry =
+					leadersMap ?? new Map<string, { intersecting: boolean }>();
+				await this.pruneDebouncedFnAddIfNotKeeping({
+					key: hash,
+					value: { entry: args.entry, leaders: leadersForRetry },
+				});
+			} catch {
+				// Best-effort only; pruning will be re-attempted on future changes.
+			}
 		}, delayMs);
 		state.timer.unref?.();
 		this._checkedPruneRetries.set(hash, state);
@@ -2875,6 +3897,7 @@ export class SharedLog<
 			} else {
 				await this._appendDeliverToReplicators(
 					result.entry,
+					coordinates,
 					minReplicasValue,
 					leaders,
 					selfHash,
@@ -2884,13 +3907,14 @@ export class SharedLog<
 			}
 		}
 
-		if (!isLeader && !this.shouldDelayAdaptiveRebalance()) {
+		const delayAdaptiveRebalance = this.shouldDelayAdaptiveRebalance();
+		if (!isLeader && !delayAdaptiveRebalance) {
 			this.pruneDebouncedFnAddIfNotKeeping({
 				key: result.entry.hash,
 				value: { entry: result.entry, leaders },
 			});
 		}
-		if (!this._isAdaptiveReplicating) {
+		if (!delayAdaptiveRebalance) {
 			this.rebalanceParticipationDebounced?.call();
 		}
 
@@ -2932,8 +3956,22 @@ export class SharedLog<
 		this._repairRetryTimers = new Set();
 		this._recentRepairDispatch = new Map();
 		this._repairSweepRunning = false;
-		this._repairSweepForceFreshPending = false;
-		this._repairSweepAddedPeersPending = new Set();
+		this._repairSweepPendingModes = new Set();
+		this._repairSweepPendingPeersByMode = createRepairPendingPeersByMode();
+		this._repairFrontierByMode = createRepairFrontierByMode() as Map<
+			RepairDispatchMode,
+			Map<string, Map<string, EntryReplicated<R>>>
+		>;
+		this._repairFrontierActiveTargetsByMode = createRepairActiveTargetsByMode();
+		this._repairSweepOptimisticGidPeersPending = new Map();
+		this._entryKnownPeers = new Map();
+		this._joinAuthoritativeRepairTimersByDelay = new Map();
+		this._joinAuthoritativeRepairPeersByDelay = new Map();
+		this._assumeSyncedRepairSuppressedUntil = 0;
+		this._appendBackfillTimer = undefined;
+		this._appendBackfillPendingByTarget = new Map();
+		this._repairMetrics = createRepairMetrics();
+		this._topicSubscribersCache = new Map();
 		this.coordinateToHash = new Cache<string>({ max: 1e6, ttl: 1e4 });
 		this.recentlyRebalanced = new Cache<string>({ max: 1e4, ttl: 1e5 });
 
@@ -3011,7 +4049,10 @@ export class SharedLog<
 		this.pendingMaturity = new Map();
 
 		const id = sha256Base64Sync(this.log.id);
-		const storage = await this.node.storage.sublevel(id);
+		const [storage, logScope] = await Promise.all([
+			this.node.storage.sublevel(id),
+			this.node.indexer.scope(id),
+		]);
 
 		const localBlocks = await new AnyBlockStore(await storage.sublevel("blocks"));
 		const fanoutService = getSharedLogFanoutService(this.node.services);
@@ -3049,6 +4090,18 @@ export class SharedLog<
 					})) ?? []
 				);
 			},
+			watchProviders: fanoutService
+				? (cid, opts) =>
+						fanoutService.watchProviders(blockProviderNamespace(cid), {
+							signal: opts.signal,
+							want: 8,
+							ttlMs: 10_000,
+							renewIntervalMs: 5_000,
+							bootstrapMaxPeers: 2,
+							onProviders: (providers) =>
+								opts.onProviders(providers.map((provider) => provider.hash)),
+						})
+				: undefined,
 			onPut: async (cid) => {
 				// Best-effort directory announce for "get without remote.from" workflows.
 				try {
@@ -3062,20 +4115,19 @@ export class SharedLog<
 			},
 		});
 
-		await this.remoteBlocks.start();
-
-		const logScope = await this.node.indexer.scope(id);
-		const replicationIndex = await logScope.scope("replication");
+		const remoteBlocksStartPromise = this.remoteBlocks.start();
+		const [replicationIndex, logIndex] = await Promise.all([
+			logScope.scope("replication"),
+			logScope.scope("log"),
+		]);
 		this._replicationRangeIndex = await replicationIndex.init({
 			schema: this.indexableDomain.constructorRange,
 		});
-
 		this._entryCoordinatesIndex = await replicationIndex.init({
 			schema: this.indexableDomain.constructorEntry,
 		});
 
-		const logIndex = await logScope.scope("log");
-
+		await remoteBlocksStartPromise;
 		const hasIndexedReplicationInfo =
 			(await this.replicationIndex.count({
 				query: [
@@ -3102,8 +4154,34 @@ export class SharedLog<
 		);
 
 		this.pruneDebouncedFn = debouncedAccumulatorMap(
-			(map) => {
-				this.prune(map);
+			async (map) => {
+				const current = new Map<
+					string,
+					{
+						entry: CheckedPruneEntry<T, R>;
+						leaders: CheckedPruneLeaderMap;
+					}
+				>();
+				const selfReplicating = await this.isReplicating();
+				for (const [hash, value] of map) {
+					const checkedPruneLeaders = await this.resolveCheckedPruneLeaders({
+						hash,
+						entry: value.entry,
+						leaders: value.leaders,
+						selfReplicating,
+					});
+					if (checkedPruneLeaders.localLeader) {
+						await this.cancelCheckedPruneForLocalLeader(hash);
+						continue;
+					}
+					current.set(hash, {
+						...value,
+						leaders: checkedPruneLeaders.leaders,
+					});
+				}
+				if (current.size > 0) {
+					this.prune(current);
+				}
 			},
 			PRUNE_DEBOUNCE_INTERVAL, // TODO make this dynamic on the number of replicators
 			(into, from) => {
@@ -3237,47 +4315,50 @@ export class SharedLog<
 		}
 
 		// Open for communcation
-		await this.rpc.open({
-			queryType: TransportMessage,
-			responseType: TransportMessage,
-			responseHandler: (query, context) => this.onMessage(query, context),
-			topic: this.topic,
-		});
-
 		this._onSubscriptionFn =
 			this._onSubscriptionFn || this._onSubscription.bind(this);
-		await this.node.services.pubsub.addEventListener(
-			"subscribe",
-			this._onSubscriptionFn,
-		);
-
 		this._onUnsubscriptionFn =
 			this._onUnsubscriptionFn || this._onUnsubscription.bind(this);
-		await this.node.services.pubsub.addEventListener(
-			"unsubscribe",
-			this._onUnsubscriptionFn,
-		);
+		await Promise.all([
+			this.rpc.open({
+				queryType: TransportMessage,
+				responseType: TransportMessage,
+				responseHandler: (query, context) => this.onMessage(query, context),
+				topic: this.topic,
+			}),
+			this.node.services.pubsub.addEventListener(
+				"subscribe",
+				this._onSubscriptionFn,
+			),
+			this.node.services.pubsub.addEventListener(
+				"unsubscribe",
+				this._onUnsubscriptionFn,
+			),
+		]);
 
-		await this.rpc.subscribe();
-		await this._openFanoutChannel(options?.fanout);
-
-		// mark all our replicaiton ranges as "new", this would allow other peers to understand that we recently reopend our database and might need some sync and warmup
-		await this.updateTimestampOfOwnedReplicationRanges(); // TODO do we need to do this before subscribing?
+		const fanoutOpenPromise = this._openFanoutChannel(options?.fanout);
+		// Mark previously-owned replication ranges as "new" only when they already exist.
+		// Fresh opens have nothing to touch here, so skip the extra scan/write entirely.
+		const updateOwnedReplicationPromise = hasIndexedReplicationInfo
+			? this.updateTimestampOfOwnedReplicationRanges()
+			: Promise.resolve();
+		await Promise.all([fanoutOpenPromise, updateOwnedReplicationPromise]);
 
 		// if we had a previous session with replication info, and new replication info dictates that we unreplicate
 		// we should do that. Otherwise if options is a unreplication we dont need to do anything because
 		// we are already unreplicated (as we are just opening)
 
-		let isUnreplicationOptionsDefined = isUnreplicationOptions(
+		const isUnreplicationOptionsDefined = isUnreplicationOptions(
 			options?.replicate,
 		);
 
 		const canResumeReplication =
+			hasIndexedReplicationInfo &&
 			(await isReplicationOptionsDependentOnPreviousState(
 				options?.replicate,
 				this.replicationIndex,
 				this.node.identity.publicKey,
-			)) && hasIndexedReplicationInfo;
+			));
 
 		if (hasIndexedReplicationInfo && isUnreplicationOptionsDefined) {
 			await this.replicate(options?.replicate, { checkDuplicates: true });
@@ -3330,25 +4411,26 @@ export class SharedLog<
 
 	async afterOpen(): Promise<void> {
 		await super.afterOpen();
+		const existingSubscribersPromise = this._getTopicSubscribers(this.topic);
 
 		// We do this here, because these calls requires this.closed == false
-			void this.pruneOfflineReplicators()
-				.then(() => {
-					this._replicatorsReconciled = true;
-				})
+		void this.pruneOfflineReplicators()
+			.then(() => {
+				this._replicatorsReconciled = true;
+			})
 			.catch((error) => {
 				if (isNotStartedError(error as Error)) {
 					return;
 				}
-					logger.error(error);
-				});
+				logger.error(error);
+			});
 
-			this.startReplicatorLivenessSweep();
+		this.startReplicatorLivenessSweep();
 
-			await this.rebalanceParticipation();
+		await this.rebalanceParticipation();
 
 		// Take into account existing subscription
-		(await this._getTopicSubscribers(this.topic))?.forEach((v) => {
+		(await existingSubscribersPromise)?.forEach((v) => {
 			if (v.equals(this.node.identity.publicKey)) {
 				return;
 			}
@@ -3958,39 +5040,60 @@ export class SharedLog<
 		this.coordinateToHash.clear();
 		this.recentlyRebalanced.clear();
 		this.uniqueReplicators.clear();
-			this._closeController.abort();
+		this._topicSubscribersCache.clear();
+		this._closeController.abort();
 
-			clearInterval(this.interval);
-			this.stopReplicatorLivenessSweep();
+		clearInterval(this.interval);
+		this.stopReplicatorLivenessSweep();
 
-			this.node.services.pubsub.removeEventListener(
-				"subscribe",
-				this._onSubscriptionFn,
+		this.node.services.pubsub.removeEventListener(
+			"subscribe",
+			this._onSubscriptionFn,
 		);
 
 		this.node.services.pubsub.removeEventListener(
 			"unsubscribe",
 			this._onUnsubscriptionFn,
 		);
-			for (const timer of this._repairRetryTimers) {
-				clearTimeout(timer);
-			}
-			this._repairRetryTimers.clear();
-			this._recentRepairDispatch.clear();
-			this._repairSweepRunning = false;
-			this._repairSweepForceFreshPending = false;
-			this._repairSweepAddedPeersPending.clear();
+		for (const timer of this._repairRetryTimers) {
+			clearTimeout(timer);
+		}
+		this._repairRetryTimers.clear();
+		this._recentRepairDispatch.clear();
+		this._repairSweepRunning = false;
+		this._repairSweepPendingModes.clear();
+		for (const peers of this._repairSweepPendingPeersByMode.values()) {
+			peers.clear();
+		}
+		this._repairSweepOptimisticGidPeersPending.clear();
+		this._entryKnownPeers.clear();
+		for (const timer of this._joinAuthoritativeRepairTimersByDelay.values()) {
+			clearTimeout(timer);
+		}
+		this._joinAuthoritativeRepairTimersByDelay.clear();
+		this._joinAuthoritativeRepairPeersByDelay.clear();
+		for (const targets of this._repairFrontierByMode.values()) {
+			targets.clear();
+		}
+		for (const targets of this._repairFrontierActiveTargetsByMode.values()) {
+			targets.clear();
+		}
+		if (this._appendBackfillTimer) {
+			clearTimeout(this._appendBackfillTimer);
+			this._appendBackfillTimer = undefined;
+		}
+		this._appendBackfillPendingByTarget.clear();
 
 		for (const [_k, v] of this._pendingDeletes) {
 			v.clear();
 			v.promise.resolve(); // TODO or reject?
 		}
-			for (const [_k, v] of this._pendingIHave) {
-				v.clear();
-			}
-			for (const [_k, v] of this._checkedPruneRetries) {
-				if (v.timer) clearTimeout(v.timer);
-			}
+		for (const [_k, v] of this._pendingIHave) {
+			v.clear();
+		}
+		for (const [_k, v] of this._checkedPruneRetries) {
+			if (v.timer) clearTimeout(v.timer);
+		}
 
 		await this.remoteBlocks.stop();
 		this._pendingDeletes.clear();
@@ -4153,6 +5256,8 @@ export class SharedLog<
 				 */
 
 				const { heads } = msg;
+				const isRepairHint =
+					(msg.reserved[0] & EXCHANGE_HEADS_REPAIR_HINT) !== 0;
 
 				logger.trace(
 					`${this.node.identity.publicKey.hashcode()}: Recieved heads: ${
@@ -4162,6 +5267,7 @@ export class SharedLog<
 
 				if (heads) {
 					const filteredHeads: EntryWithRefs<any>[] = [];
+					const confirmedHashes = new Set<string>();
 					for (const head of heads) {
 						if (!(await this.log.has(head.entry.hash))) {
 							head.entry.init({
@@ -4170,10 +5276,22 @@ export class SharedLog<
 								encoding: this.log.encoding,
 							});
 							filteredHeads.push(head);
+						} else {
+							confirmedHashes.add(head.entry.hash);
 						}
+					}
+					const fromIsSelf = context.from.equals(this.node.identity.publicKey);
+					if (!fromIsSelf) {
+						this.markEntriesKnownByPeer(
+							heads.map((head) => head.entry.hash),
+							context.from.hashcode(),
+						);
 					}
 
 					if (filteredHeads.length === 0) {
+						if (confirmedHashes.size > 0 && !fromIsSelf) {
+							await this.sendRepairConfirmation(context.from!, confirmedHashes);
+						}
 						return;
 					}
 					const groupedByGid = await groupByGid(filteredHeads);
@@ -4260,8 +5378,15 @@ export class SharedLog<
 
 							let maybeDelete: EntryWithRefs<any>[][] | undefined;
 							let toMerge: Entry<any>[] = [];
+							let toPersist: Entry<any>[] = [];
 							let toDelete: Entry<any>[] | undefined;
-							if (isLeader) {
+							// Targeted repair is sent only to peers the sender currently believes
+							// should store the entry. Accept it while local membership catches up;
+							// the normal checked-prune path below can still remove it if this peer
+							// truly no longer owns the entry.
+							const acceptsTargetedRepair = isRepairHint && fromIsLeader;
+							const keepAsLeader = isLeader || acceptsTargetedRepair;
+							if (keepAsLeader) {
 								for (const entry of entries) {
 									this.pruneDebouncedFn.delete(entry.entry.hash);
 									this.removePruneRequestSent(entry.entry.hash);
@@ -4282,8 +5407,9 @@ export class SharedLog<
 							}
 
 							outer: for (const entry of entries) {
-								if (isLeader || (await this.keep?.(entry.entry))) {
+								if (keepAsLeader || (await this.keep?.(entry.entry))) {
 									toMerge.push(entry.entry);
+									toPersist.push(entry.entry);
 								} else {
 									for (const ref of entry.gidRefrences) {
 										const map = await this.log.entryIndex.getHeads(ref).all();
@@ -4307,7 +5433,25 @@ export class SharedLog<
 							}
 
 							if (toMerge.length > 0) {
+								this.markEntriesKnownByPeer(
+									toMerge.map((entry) => entry.hash),
+									context.from!.hashcode(),
+								);
 								await this.log.join(toMerge);
+								// Network joins bypass SharedLog.join(), but churn repair scans
+								// the coordinate index to redistribute entries after membership changes.
+								for (const entry of toPersist) {
+									const replicas = decodeReplicas(entry).getValue(this);
+									await this.findLeaders(
+										await this.createCoordinates(entry, replicas),
+										entry,
+										{ roleAge: 0, persist: {} },
+									);
+								}
+								for (const merged of toMerge) {
+									confirmedHashes.add(merged.hash);
+								}
+								await this.pruneJoinedEntriesNoLongerLed(toMerge);
 
 								toDelete?.map((x) =>
 									// TODO types
@@ -4354,6 +5498,10 @@ export class SharedLog<
 						promises.push(fn()); // we do this concurrently since waitForIsLeader might be a blocking operation for some entries
 					}
 					await Promise.all(promises);
+					if (confirmedHashes.size > 0 && !context.from.equals(this.node.identity.publicKey)) {
+						this.markEntriesKnownByPeer(confirmedHashes, context.from.hashcode());
+						await this.sendRepairConfirmation(context.from!, confirmedHashes);
+					}
 				}
 			} else if (msg instanceof RequestIPrune) {
 				const hasAndIsLeader: string[] = [];
@@ -4361,6 +5509,7 @@ export class SharedLog<
 
 				for (const hash of msg.hashes) {
 					this.removePruneRequestSent(hash, from);
+					this.removeEntriesKnownByPeer([hash], from);
 
 					// if we expect the remote to be owner of this entry because we are to prune ourselves, then we need to remove the remote
 					// this is due to that the remote has previously indicated to be a replicator to help us prune but now has changed their mind
@@ -4373,7 +5522,11 @@ export class SharedLog<
 					const indexedEntry = await this.log.entryIndex.getShallow(hash);
 					let isLeader = false;
 
-					if (indexedEntry) {
+					if (
+						indexedEntry &&
+						!this._pendingDeletes.has(hash) &&
+						(await this.log.blocks.has(hash))
+					) {
 						this.removePeerFromGidPeerHistory(
 							context.from!.hashcode(),
 							indexedEntry!.value.meta.gid,
@@ -4475,6 +5628,10 @@ export class SharedLog<
 				for (const hash of msg.hashes) {
 					this._pendingDeletes.get(hash)?.resolve(context.from.hashcode());
 				}
+			} else if (msg instanceof ConfirmEntriesMessage) {
+				this.markEntriesKnownByPeer(msg.hashes, context.from.hashcode());
+				this.clearRepairFrontierHashes(context.from.hashcode(), msg.hashes);
+				return;
 			} else if (await this.syncronizer.onMessage(msg, context)) {
 				return; // the syncronizer has handled the message
 			} else if (msg instanceof BlocksMessage) {
@@ -4846,6 +6003,23 @@ export class SharedLog<
 			options?.replicate &&
 			typeof options.replicate !== "boolean" &&
 			options.replicate.assumeSynced;
+		const seedAssumeSyncedPeerHistory = async (entry: Entry<T>) => {
+			if (!assumeSynced) {
+				return;
+			}
+
+			const minReplicas = decodeReplicas(entry).getValue(this);
+			const leaders = await this.findLeaders(
+				await this.createCoordinates(entry, minReplicas),
+				entry,
+				{
+					roleAge: 0,
+					persist: false,
+				},
+			);
+
+			this.addPeersToGidPeerHistory(entry.meta.gid, leaders.keys());
+		};
 		const persistCoordinate = async (entry: Entry<T>) => {
 			const minReplicas = decodeReplicas(entry).getValue(this);
 			const leaders = await this.findLeaders(
@@ -4887,9 +6061,20 @@ export class SharedLog<
 		if (options?.replicate) {
 			let messageToSend: AddedReplicationSegmentMessage | undefined = undefined;
 
+			if (assumeSynced) {
+				// `assumeSynced` is an explicit contract that this join should trust the
+				// supplied history and avoid initiating outbound repair while the local
+				// replication ranges settle.
+				this._assumeSyncedRepairSuppressedUntil =
+					Date.now() + ASSUME_SYNCED_REPAIR_SUPPRESSION_MS;
+				for (const entry of entriesToReplicate) {
+					await seedAssumeSyncedPeerHistory(entry);
+				}
+			}
+
 			await this.replicate(entriesToReplicate, {
 				rebalance: assumeSynced ? false : true,
-				checkDuplicates: true,
+				checkDuplicates: assumeSynced ? false : true,
 				mergeSegments:
 					typeof options.replicate !== "boolean" && options.replicate
 						? options.replicate.mergeSegments
@@ -4967,9 +6152,14 @@ export class SharedLog<
 				clear();
 				// `waitForReplicator()` is typically used as a precondition before join/replicate
 				// flows. A replicator can become mature and enqueue a debounced rebalance
-				// (`replicationChangeDebounceFn`) slightly later. Flush here so callers don't
-				// observe a "late" rebalance after the wait resolves.
-				await this.replicationChangeDebounceFn?.flush?.();
+				// (`replicationChangeDebounceFn`) slightly later. Kick the flush, but do not
+				// make membership waits depend on all rebalance work finishing; callers that
+				// need settled distribution already wait for that explicitly.
+				this.replicationChangeDebounceFn?.flush?.().catch((error: any) => {
+					if (!isNotStartedError(error)) {
+						logger.error(error?.toString?.() ?? String(error));
+					}
+				});
 				deferred.resolve();
 			};
 
@@ -5390,6 +6580,7 @@ export class SharedLog<
 		entry: Entry<T> | EntryReplicated<R> | ShallowEntry,
 		options?: {
 			roleAge?: number;
+			candidates?: Iterable<string>;
 			onLeader?: (key: string) => void;
 			// persist even if not leader
 			persist?:
@@ -5433,6 +6624,7 @@ export class SharedLog<
 		},
 		options?: {
 			roleAge?: number;
+			candidates?: Iterable<string>;
 			onLeader?: (key: string) => void;
 			// persist even if not leader
 			persist?:
@@ -5458,6 +6650,7 @@ export class SharedLog<
 		cursors: NumberFromType<R>[],
 		options?: {
 			roleAge?: number;
+			candidates?: Iterable<string>;
 		},
 	): Promise<Map<string, { intersecting: boolean }>> {
 		const roleAge = options?.roleAge ?? (await this.getDefaultMinRoleAge()); // TODO -500 as is added so that i f someone else is just as new as us, then we treat them as mature as us. without -500 we might be slower syncing if two nodes starts almost at the same time
@@ -5467,46 +6660,74 @@ export class SharedLog<
 		// If it is still warming up (for example, only contains self), supplement with
 		// current subscribers until we have enough candidates for this decision.
 		let peerFilter: Set<string> | undefined = undefined;
-		const selfReplicating = await this.isReplicating();
-		if (this.uniqueReplicators.size > 0) {
-			peerFilter = new Set(this.uniqueReplicators);
-			if (selfReplicating) {
-				peerFilter.add(selfHash);
-			} else {
-				peerFilter.delete(selfHash);
-			}
-
-			try {
-				const subscribers = await this._getTopicSubscribers(this.topic);
-				if (subscribers && subscribers.length > 0) {
-					for (const subscriber of subscribers) {
-						peerFilter.add(subscriber.hashcode());
-					}
-					if (selfReplicating) {
-						peerFilter.add(selfHash);
-					} else {
-						peerFilter.delete(selfHash);
-					}
-				}
-			} catch {
-				// Best-effort only; keep current peerFilter.
-			}
+		let selfReplicating = false;
+		if (options?.candidates) {
+			peerFilter = new Set(options.candidates);
 		} else {
-			try {
-				const subscribers =
-					(await this._getTopicSubscribers(this.topic)) ?? undefined;
-				if (subscribers && subscribers.length > 0) {
-					peerFilter = new Set(subscribers.map((key) => key.hashcode()));
-					if (selfReplicating) {
-						peerFilter.add(selfHash);
-					} else {
-						peerFilter.delete(selfHash);
-					}
+			selfReplicating = await this.isReplicating();
+			if (this.uniqueReplicators.size > 0) {
+				peerFilter = new Set(this.uniqueReplicators);
+				if (selfReplicating) {
+					peerFilter.add(selfHash);
+				} else {
+					peerFilter.delete(selfHash);
 				}
-			} catch {
-				// Best-effort only; if pubsub isn't ready, do a full scan.
+
+				try {
+					const subscribers = await this._getTopicSubscribers(this.topic);
+					if (subscribers && subscribers.length > 0) {
+						for (const subscriber of subscribers) {
+							peerFilter.add(subscriber.hashcode());
+						}
+						if (selfReplicating) {
+							peerFilter.add(selfHash);
+						} else {
+							peerFilter.delete(selfHash);
+						}
+					}
+				} catch {
+					// Best-effort only; keep current peerFilter.
+				}
+			} else {
+				try {
+					const subscribers =
+						(await this._getTopicSubscribers(this.topic)) ?? undefined;
+					if (subscribers && subscribers.length > 0) {
+						peerFilter = new Set(subscribers.map((key) => key.hashcode()));
+						if (selfReplicating) {
+							peerFilter.add(selfHash);
+						} else {
+							peerFilter.delete(selfHash);
+						}
+					}
+				} catch {
+					// Best-effort only; if pubsub isn't ready, do a full scan.
+				}
 			}
 		}
+
+		if (!options?.candidates) {
+			// Reachability snapshots can briefly under-report peers. Do not let that
+			// turn a known mature indexed range into a false self-only full replica.
+			peerFilter = await this.includeIndexedLeaderCandidatesWhenUnderfilled(
+				peerFilter,
+				roleAge,
+				cursors.length,
+				selfReplicating,
+			);
+		}
+
+		if (!options?.candidates) {
+			const fullReplicaLeaders = await this.findFullReplicaLeaders(
+				cursors.length,
+				roleAge,
+				peerFilter,
+			);
+			if (fullReplicaLeaders) {
+				return fullReplicaLeaders;
+			}
+		}
+
 		return getSamples<R>(
 			cursors,
 			this.replicationIndex,
@@ -5517,6 +6738,91 @@ export class SharedLog<
 				uniqueReplicators: peerFilter,
 			},
 		);
+	}
+
+	private async includeIndexedLeaderCandidatesWhenUnderfilled(
+		peerFilter: Set<string> | undefined,
+		roleAge: number,
+		replicas: number,
+		selfReplicating: boolean,
+	): Promise<Set<string> | undefined> {
+		if (!peerFilter || peerFilter.size > replicas) {
+			return peerFilter;
+		}
+
+		const selfHash = this.node.identity.publicKey.hashcode();
+		const now = Date.now();
+		const iterator = this.replicationIndex.iterate(
+			{},
+			{ shape: { hash: true, timestamp: true }, reference: true },
+		);
+
+		try {
+			for (;;) {
+				const batch = await iterator.next(64);
+				if (batch.length === 0) {
+					break;
+				}
+				for (const result of batch) {
+					const range = result.value;
+					if (range.hash === selfHash && !selfReplicating) {
+						continue;
+					}
+					if (!isMatured(range, now, roleAge)) {
+						continue;
+					}
+					peerFilter.add(range.hash);
+				}
+			}
+		} finally {
+			await iterator.close();
+		}
+
+		return peerFilter;
+	}
+
+	private async findFullReplicaLeaders(
+		replicas: number,
+		roleAge: number,
+		peerFilter?: Set<string>,
+	): Promise<Map<string, { intersecting: boolean }> | undefined> {
+		const now = Date.now();
+		const leaders = new Map<string, { intersecting: boolean }>();
+		const includeStrict =
+			this._logProperties?.strictFullReplicaFallback !== false;
+		const iterator = this.replicationIndex.iterate(
+			{},
+			{ shape: { hash: true, timestamp: true, mode: true } },
+		);
+
+		try {
+			for (;;) {
+				const batch = await iterator.next(64);
+				if (batch.length === 0) {
+					break;
+				}
+				for (const result of batch) {
+					const range = result.value;
+					if (peerFilter && !peerFilter.has(range.hash)) {
+						continue;
+					}
+					if (!isMatured(range, now, roleAge)) {
+						continue;
+					}
+					if (range.mode === ReplicationIntent.Strict && !includeStrict) {
+						continue;
+					}
+					leaders.set(range.hash, { intersecting: true });
+					if (leaders.size > replicas) {
+						return undefined;
+					}
+				}
+			}
+		} finally {
+			await iterator.close();
+		}
+
+		return leaders.size > 0 ? leaders : undefined;
 	}
 
 	async findLeadersFromEntry(
@@ -5586,11 +6892,12 @@ export class SharedLog<
 		this._replicationInfoRequestByPeer.set(peerHash, state);
 
 		const intervalMs = Math.max(50, this.waitForReplicatorRequestIntervalMs);
-		const maxAttempts = Math.min(
-			5,
+		const maxAttempts =
 			this.waitForReplicatorRequestMaxAttempts ??
+			Math.max(
 				WAIT_FOR_REPLICATOR_REQUEST_MIN_ATTEMPTS,
-		);
+				Math.ceil(this.waitForReplicatorTimeout / intervalMs),
+			);
 
 		const tick = () => {
 			if (this.closed || this._closeController.signal.aborted) {
@@ -5733,8 +7040,8 @@ export class SharedLog<
 		entries: Map<
 			string,
 			{
-				entry: EntryReplicated<R> | ShallowOrFullEntry<any>;
-				leaders: Map<string, unknown> | Set<string>;
+				entry: CheckedPruneEntry<T, R>;
+				leaders: CheckedPruneLeaderMap | Set<string>;
 			}
 		>,
 			options?: { timeout?: number; unchecked?: boolean },
@@ -6156,56 +7463,99 @@ export class SharedLog<
 			}
 		}
 
-		const changed = false;
-		const replacedPeers = new Set<string>();
-		for (const change of changes) {
-			if (change.type === "replaced" && change.range.hash !== selfHash) {
-				replacedPeers.add(change.range.hash);
-			}
-		}
-		const addedPeers = new Set<string>();
-		for (const change of changes) {
-			if (change.type === "added" || change.type === "replaced") {
-				const hash = change.range.hash;
-				if (hash !== selfHash) {
-					// Range updates can reassign entries to an existing peer shortly after it
-					// already received a subset. Avoid suppressing legitimate follow-up repair.
-					this._recentRepairDispatch.delete(hash);
+			const changed = false;
+			const addedPeers = new Set<string>();
+			const authoritativeRepairPeers = new Set<string>();
+			const warmupPeers = new Set<string>();
+			const churnRepairPeers = new Set<string>();
+			const hasSelfWarmupChange = changes.some(
+				(change) =>
+					change.range.hash === selfHash &&
+					(change.type === "added" || change.type === "replaced"),
+			);
+			const hasSelfRangeRemoval = changes.some(
+				(change) =>
+					change.range.hash === selfHash &&
+					(change.type === "removed" || change.type === "replaced"),
+			);
+			for (const change of changes) {
+				if (
+					change.range.hash !== selfHash &&
+					(change.type === "removed" || change.type === "replaced")
+				) {
+					this.removePeerFromEntryKnownPeers(change.range.hash);
+				}
+				if (change.type === "added" || change.type === "replaced") {
+					const hash = change.range.hash;
+					if (hash !== selfHash) {
+						// Existing peers can widen/shift ranges after the initial join. If we
+						// only rescan on first-seen "added", late authoritative range updates can
+						// leave historical backfill permanently partial under load.
+						authoritativeRepairPeers.add(hash);
+						// Range updates can reassign entries to an existing peer shortly after it
+						// already received a subset. Avoid suppressing legitimate follow-up repair.
+						this._recentRepairDispatch.delete(hash);
+					}
+				}
+				if (change.type === "added") {
+					const hash = change.range.hash;
+					if (hash !== selfHash) {
+						addedPeers.add(hash);
+						warmupPeers.add(hash);
+					}
 				}
 			}
-			if (change.type === "added") {
-				const hash = change.range.hash;
-				if (hash !== selfHash && !replacedPeers.has(hash)) {
-					addedPeers.add(hash);
-				}
-			}
-		}
+		const hasAdaptiveStorageLimit =
+			this._isAdaptiveReplicating &&
+			this.replicationController?.maxMemoryLimit != null;
+		const useJoinWarmupFastPath =
+			!forceFreshDelivery &&
+			warmupPeers.size > 0 &&
+			!hasSelfWarmupChange &&
+			!hasAdaptiveStorageLimit;
+		const immediateRebalanceChanges = useJoinWarmupFastPath
+			? changes.filter(
+					(change) =>
+						!(
+							change.range.hash === selfHash &&
+							(change.type === "added" || change.type === "replaced")
+						),
+				)
+			: changes;
 
 		try {
 			const uncheckedDeliver: Map<
 				string,
 				Map<string, EntryReplicated<any>>
 			> = new Map();
-			const flushUncheckedDeliverTarget = (target: string) => {
-				const entries = uncheckedDeliver.get(target);
-				if (!entries || entries.size === 0) {
-					return;
-				}
-				const isJoinWarmupTarget = addedPeers.has(target);
-				const bypassRecentDedupe = isJoinWarmupTarget || forceFreshDelivery;
-				this.dispatchMaybeMissingEntries(target, entries, {
-					bypassRecentDedupe,
-					retryScheduleMs: isJoinWarmupTarget
-						? JOIN_WARMUP_RETRY_SCHEDULE_MS
-						: undefined,
-					forceFreshDelivery,
-				});
-				uncheckedDeliver.delete(target);
-			};
+				const flushUncheckedDeliverTarget = (target: string) => {
+					const entries = uncheckedDeliver.get(target);
+					if (!entries || entries.size === 0) {
+						return;
+					}
+					const isWarmupTarget = warmupPeers.has(target);
+					const mode: RepairDispatchMode = forceFreshDelivery
+						? "churn"
+						: isWarmupTarget
+							? "join-warmup"
+							: "join-authoritative";
+					this.dispatchMaybeMissingEntries(target, entries, {
+						bypassRecentDedupe: isWarmupTarget || forceFreshDelivery,
+						mode,
+						retryScheduleMs:
+							mode === "join-warmup"
+								? JOIN_WARMUP_RETRY_SCHEDULE_MS
+								: mode === "join-authoritative"
+									? [0]
+									: undefined,
+					});
+					uncheckedDeliver.delete(target);
+				};
 			const queueUncheckedDeliver = (
 				target: string,
 				entry: EntryReplicated<any>,
 			) => {
+				churnRepairPeers.add(target);
 				let set = uncheckedDeliver.get(target);
 				if (!set) {
 					set = new Map();
@@ -6220,18 +7570,92 @@ export class SharedLog<
 				}
 			};
 
-			for await (const entryReplicated of toRebalance<R>(
-				changes,
-				this.entryCoordinatesIndex,
-				this.recentlyRebalanced,
-				{ forceFresh: forceFreshDelivery },
-			)) {
-				if (this.closed) {
-					break;
-				}
+				if (immediateRebalanceChanges.length > 0) {
+					for await (const entryReplicated of toRebalance<R>(
+						immediateRebalanceChanges,
+						this.entryCoordinatesIndex,
+						this.recentlyRebalanced,
+						{
+							forceFresh: forceFreshDelivery || useJoinWarmupFastPath,
+						},
+					)) {
+						if (this.closed) {
+							break;
+						}
 
-				let oldPeersSet: Set<string> | undefined;
-				if (!forceFreshDelivery) {
+						if (useJoinWarmupFastPath) {
+							let oldPeersSet: Set<string> | undefined;
+							const gid = entryReplicated.gid;
+							oldPeersSet = gidPeersHistorySnapshot.get(gid);
+							if (!gidPeersHistorySnapshot.has(gid)) {
+								const existing = this._gidPeersHistory.get(gid);
+								oldPeersSet = existing ? new Set(existing) : undefined;
+								gidPeersHistorySnapshot.set(gid, oldPeersSet);
+							}
+
+							for (const target of warmupPeers) {
+								queueUncheckedDeliver(target, entryReplicated);
+							}
+
+							const candidatePeers = new Set<string>([selfHash]);
+							for (const target of warmupPeers) {
+								candidatePeers.add(target);
+							}
+							if (oldPeersSet) {
+								for (const oldPeer of oldPeersSet) {
+									candidatePeers.add(oldPeer);
+								}
+							}
+
+							const currentPeers = await this.findLeaders(
+								entryReplicated.coordinates,
+								entryReplicated,
+								{
+									roleAge: 0,
+									candidates: candidatePeers,
+									persist: false,
+								},
+							);
+
+							if (oldPeersSet) {
+								for (const oldPeer of oldPeersSet) {
+									if (!currentPeers.has(oldPeer)) {
+										this.removePruneRequestSent(entryReplicated.hash);
+									}
+								}
+							}
+
+							for (const [peer] of currentPeers) {
+								if (warmupPeers.has(peer)) {
+									this.markRepairSweepOptimisticPeer(entryReplicated.gid, peer);
+								}
+							}
+
+							const authoritativePeers = [...currentPeers.keys()].filter(
+								(peer) =>
+									!warmupPeers.has(peer) &&
+									!this.hasPendingRepairSweepOptimisticPeer(entryReplicated.gid, peer),
+							);
+							this.addPeersToGidPeerHistory(
+								entryReplicated.gid,
+								authoritativePeers,
+								true,
+							);
+
+							if (!currentPeers.has(selfHash)) {
+								this.pruneDebouncedFnAddIfNotKeeping({
+									key: entryReplicated.hash,
+									value: { entry: entryReplicated, leaders: currentPeers },
+								});
+
+								this.responseToPruneDebouncedFn.delete(entryReplicated.hash);
+							} else {
+								await this.cancelCheckedPruneForLocalLeader(entryReplicated.hash);
+							}
+							continue;
+						}
+
+					let oldPeersSet: Set<string> | undefined;
 					const gid = entryReplicated.gid;
 					oldPeersSet = gidPeersHistorySnapshot.get(gid);
 					if (!gidPeersHistorySnapshot.has(gid)) {
@@ -6239,18 +7663,18 @@ export class SharedLog<
 						oldPeersSet = existing ? new Set(existing) : undefined;
 						gidPeersHistorySnapshot.set(gid, oldPeersSet);
 					}
-				}
-				let isLeader = false;
 
-				let currentPeers = await this.findLeaders(
-					entryReplicated.coordinates,
-					entryReplicated,
-					{
-						// we do this to make sure new replicators get data even though they are not mature so they can figure out if they want to replicate more or less
-						// TODO make this smarter because if a new replicator is not mature and want to replicate too much data the syncing overhead can be bad
-						roleAge: 0,
-					},
-				);
+					let isLeader = false;
+					const currentPeers = await this.findLeaders(
+						entryReplicated.coordinates,
+						entryReplicated,
+						{
+							// We do this to make sure new replicators get data even though
+							// they are not mature so they can figure out if they want to
+							// replicate more or less.
+							roleAge: 0,
+						},
+					);
 
 					for (const [currentPeer] of currentPeers) {
 						if (currentPeer === this.node.identity.publicKey.hashcode()) {
@@ -6263,44 +7687,90 @@ export class SharedLog<
 						}
 					}
 
-				if (oldPeersSet) {
-					for (const oldPeer of oldPeersSet) {
-						if (!currentPeers.has(oldPeer)) {
-							this.removePruneRequestSent(entryReplicated.hash);
+						if (oldPeersSet) {
+							for (const oldPeer of oldPeersSet) {
+								if (!currentPeers.has(oldPeer)) {
+									this.removePruneRequestSent(entryReplicated.hash);
+								}
+							}
 						}
+
+						for (const [peer] of currentPeers) {
+							if (addedPeers.has(peer)) {
+								this.markRepairSweepOptimisticPeer(entryReplicated.gid, peer);
+							}
+						}
+
+						const authoritativePeers = [...currentPeers.keys()].filter(
+							(peer) =>
+								!addedPeers.has(peer) &&
+								!this.hasPendingRepairSweepOptimisticPeer(entryReplicated.gid, peer),
+						);
+						this.addPeersToGidPeerHistory(
+							entryReplicated.gid,
+							authoritativePeers,
+							true,
+						);
+
+					if (!isLeader) {
+						this.pruneDebouncedFnAddIfNotKeeping({
+							key: entryReplicated.hash,
+							value: { entry: entryReplicated, leaders: currentPeers },
+						});
+
+						this.responseToPruneDebouncedFn.delete(entryReplicated.hash); // don't allow others to prune because of expecting me to replicating this entry
+					} else {
+						await this.cancelCheckedPruneForLocalLeader(entryReplicated.hash);
 					}
 				}
-
-				this.addPeersToGidPeerHistory(
-					entryReplicated.gid,
-					currentPeers.keys(),
-					true,
-				);
-
-				if (!isLeader) {
-					this.pruneDebouncedFnAddIfNotKeeping({
-						key: entryReplicated.hash,
-						value: { entry: entryReplicated, leaders: currentPeers },
-					});
-
-					this.responseToPruneDebouncedFn.delete(entryReplicated.hash); // don't allow others to prune because of expecting me to replicating this entry
-				} else {
-					this.pruneDebouncedFn.delete(entryReplicated.hash);
-					await this._pendingDeletes
-						.get(entryReplicated.hash)
-						?.reject(new Error("Failed to delete, is leader again"));
-					this.removePruneRequestSent(entryReplicated.hash);
 				}
-			}
 
-			if (forceFreshDelivery || addedPeers.size > 0) {
-				// Schedule a coalesced background sweep for churn/join windows instead of
-				// scanning the whole index synchronously on each replication change.
-				this.scheduleRepairSweep({ forceFreshDelivery, addedPeers });
-			}
+				if (forceFreshDelivery) {
+					// Pure leave/shrink churn can have zero `addedPeers`, but the peers that
+					// received redistributed entries still need a follow-up repair pass if the
+					// immediate maybe-sync misses one entry.
+					this.scheduleRepairSweep({
+						mode: "churn",
+						peers: churnRepairPeers,
+					});
+				} else if (useJoinWarmupFastPath) {
+					// Pure join warmup uses the cheap immediate maybe-missing dispatch above,
+					// then defers the authoritative sweep so it does not compete with the
+					// write burst itself.
+					const peers = new Set(addedPeers);
+					const timer = setTimeout(() => {
+						this._repairRetryTimers.delete(timer);
+						if (this.closed) {
+							return;
+						}
+						this.scheduleRepairSweep({
+							mode: "join-warmup",
+							peers,
+						});
+					}, 250);
+					timer.unref?.();
+					this._repairRetryTimers.add(timer);
+				} else if (authoritativeRepairPeers.size > 0) {
+					this.scheduleRepairSweep({
+						mode: "join-authoritative",
+						peers: authoritativeRepairPeers,
+					});
+				}
+
+				if (!forceFreshDelivery && authoritativeRepairPeers.size > 0) {
+					this.scheduleJoinAuthoritativeRepair(authoritativeRepairPeers);
+				}
 
 			for (const target of [...uncheckedDeliver.keys()]) {
 				flushUncheckedDeliverTarget(target);
+			}
+
+			if (this._isAdaptiveReplicating && hasSelfRangeRemoval) {
+				// Adaptive shrink/replacement can make already-indexed local heads
+				// prunable even when the incremental rebalance scan missed them under
+				// churn or timing pressure. Re-scan after repair dispatches are flushed
+				// so checked prune work is enqueued before callers wait for idle.
+				await this.pruneIndexedEntriesNoLongerLed();
 			}
 
 			return changed;
@@ -6336,6 +7806,7 @@ export class SharedLog<
 		if (!prev || prev < now) {
 			this.latestReplicationInfoMessage.set(fromHash, now);
 		}
+		this.invalidateSharedLogTopicSubscribersCache();
 
 		return this.handleSubscriptionChange(
 			evt.detail.from,
@@ -6356,6 +7827,7 @@ export class SharedLog<
 
 		this.remoteBlocks.onReachable(evt.detail.from);
 		this._replicationInfoBlockedPeers.delete(evt.detail.from.hashcode());
+		this.invalidateSharedLogTopicSubscribersCache();
 
 		await this.handleSubscriptionChange(
 			evt.detail.from,
@@ -6401,6 +7873,13 @@ export class SharedLog<
 
 				if (!dynamicRange) {
 					return; // not allowed to replicate
+				}
+
+				if (
+					this.replicationController.maxMemoryLimit != null &&
+					usedMemory > this.replicationController.maxMemoryLimit
+				) {
+					await this.pruneIndexedEntriesNoLongerLed();
 				}
 
 				const peersSize = (await peers.getSize()) || 1;

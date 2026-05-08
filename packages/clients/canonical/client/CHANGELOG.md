@@ -1,5 +1,137 @@
 # Changelog
 
+## [1.1.32](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.31...canonical-client-v1.1.32) (2026-05-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.29
+
+## [1.1.31](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.30...canonical-client-v1.1.31) (2026-05-04)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.28
+
+## [1.1.30](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.29...canonical-client-v1.1.30) (2026-05-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.27
+
+## [1.1.29](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.28...canonical-client-v1.1.29) (2026-05-02)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.26
+
+## [1.1.28](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.27...canonical-client-v1.1.28) (2026-05-01)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.25
+
+## [1.1.27](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.26...canonical-client-v1.1.27) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.24
+
+## [1.1.26](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.25...canonical-client-v1.1.26) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.23
+
+## [1.1.25](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.24...canonical-client-v1.1.25) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.22
+
+## [1.1.24](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.23...canonical-client-v1.1.24) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.21
+
+## [1.1.23](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.22...canonical-client-v1.1.23) (2026-04-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.20
+
+## [1.1.22](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.21...canonical-client-v1.1.22) (2026-04-28)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.19
+
+## [1.1.21](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.20...canonical-client-v1.1.21) (2026-04-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.18
+
+## [1.1.20](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.19...canonical-client-v1.1.20) (2026-04-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.17
+
+## [1.1.19](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.18...canonical-client-v1.1.19) (2026-03-30)
+
+
+### Bug Fixes
+
+* **packages:** normalize npm metadata for released modules ([#702](https://github.com/dao-xyz/peerbit/issues/702)) ([bc77b1d](https://github.com/dao-xyz/peerbit/commit/bc77b1d196f86d3783050903e85bef720d703cf2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/crypto bumped to 3.1.1
+    * @peerbit/program bumped to 6.0.16
+
 ## [1.1.18](https://github.com/dao-xyz/peerbit/compare/canonical-client-v1.1.17...canonical-client-v1.1.18) (2026-03-29)
 
 

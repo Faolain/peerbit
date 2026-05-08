@@ -1,6 +1,6 @@
 {
 	"name": "@peerbit/indexer-sqlite3",
-	"version": "3.0.5",
+	"version": "3.0.6",
 	"description": "SQLite index for document store",
 	"type": "module",
 	"sideEffects": false,
@@ -65,7 +65,8 @@
 		"test:browser": "aegir clean && aegir test -t browser",
 		"test:node": "aegir clean && aegir test -t node",
 		"lint": "aegir lint",
-		"test:cov": "aegir test -t node --cov"
+		"test:cov": "aegir test -t node --cov",
+		"bench:query-planner": "node --loader ts-node/esm ./benchmark/query-planner.ts"
 	},
 	"author": "dao.xyz",
 	"license": "MIT",

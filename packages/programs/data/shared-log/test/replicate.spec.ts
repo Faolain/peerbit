@@ -462,39 +462,38 @@ describe(`replicate`, () => {
 
 				expect(db1MinRoleAge - db2MinRoleAge).lessThanOrEqual(1); // db1 sets the minRole age because it is the oldest. So both dbs get same minRole age limit (including some error margin)
 
-				const now = +new Date();
+				const db1SelfRange = (await db1.log.getMyReplicationSegments())[0];
+				const db2SelfRange = (await db2.log.getMyReplicationSegments())[0];
+				const db1ProbeNow = Number(db2SelfRange.timestamp) + db1MinRoleAge - 1;
 
 				// Mature because if "first"
 				let selfMatured = isMatured(
-					(await db1.log.getMyReplicationSegments())[0],
-					now,
-					await db1.log.getDefaultMinRoleAge(),
+					db1SelfRange,
+					db1ProbeNow,
+					db1MinRoleAge,
 				);
 				expect(selfMatured).to.be.true;
 
-				await waitForResolved(async () => {
-					const minRoleAge = await db1.log.getDefaultMinRoleAge();
-					expect(
-						(await db1.log.replicationIndex.iterate().all())
-							.map((x) => x.value)
-							.filter((x) => isMatured(x, now, minRoleAge))
-							.map((x) => x.hash),
-					).to.deep.equal([db1.node.identity.publicKey.hashcode()]);
-				});
+				expect(
+					(await db1.log.replicationIndex.iterate().all())
+						.map((x) => x.value)
+						.filter((x) => isMatured(x, db1ProbeNow, db1MinRoleAge))
+						.map((x) => x.hash),
+				).to.deep.equal([db1.node.identity.publicKey.hashcode()]);
 
 				// assume other nodes except me are mature if they open before me
+				const db2ProbeNow = Number(db2SelfRange.timestamp) + db2MinRoleAge - 1;
 				selfMatured = isMatured(
-					(await db2.log.getMyReplicationSegments())[0],
-					now,
-					await db2.log.getDefaultMinRoleAge(),
+					db2SelfRange,
+					db2ProbeNow,
+					db2MinRoleAge,
 				);
 				expect(selfMatured).to.be.false;
 
-				const minRoleAge = await db2.log.getDefaultMinRoleAge();
 				expect(
 					(await db2.log.replicationIndex.iterate().all())
 						.map((x) => x.value)
-						.map((x) => isMatured(x, now, minRoleAge)),
+						.map((x) => isMatured(x, db2ProbeNow, db2MinRoleAge)),
 				).to.have.members([false, true]);
 			});
 
@@ -688,16 +687,12 @@ describe(`replicate`, () => {
 				const store = new EventStore<string, any>();
 
 				let domain = createReplicationDomainHash("u32");
-
-				let startFactor = 500000;
+				const startFactor = 500000;
 				let startOffset = 0;
+
 				const db1 = await session.peers[0].open(store.clone(), {
 					args: {
-						replicate: {
-							factor: startFactor,
-							offset: startOffset,
-							normalized: false,
-						},
+						replicate: false,
 						domain,
 					},
 				});
@@ -713,19 +708,28 @@ describe(`replicate`, () => {
 					db: EventStore<string, any>,
 					entry: Entry<any>,
 				) => {
-					const offset = await db.log.domain.fromEntry(added.entry);
+					const offset = await db.log.domain.fromEntry(entry);
 					const ranges = await db.log.replicationIndex
 						.iterate({ sort: new Sort({ key: ["start1"] }) })
 						.all();
 					expect(ranges).to.have.length(2);
 
-					const rangeStart = ranges[0].value.toReplicationRange();
-					expect(rangeStart.offset).to.be.eq(startOffset);
-					expect(rangeStart.factor).to.equal(startFactor);
+					const replicationRanges = ranges.map((x) =>
+						x.value.toReplicationRange(),
+					);
+					const rangeStart = replicationRanges.find(
+						(range) => range.factor === startFactor,
+					);
+					expect(rangeStart, "fixed range").to.exist;
+					expect(rangeStart!.offset).to.be.eq(startOffset);
+					expect(rangeStart!.factor).to.equal(startFactor);
 
-					const rangeEntry = ranges[1].value.toReplicationRange();
-					expect(rangeEntry.offset).to.be.closeTo(offset, 0.0001);
-					expect(rangeEntry.factor).to.equal(1); // mininum unit of length
+					const rangeEntry = replicationRanges.find(
+						(range) => range.factor === 1,
+					);
+					expect(rangeEntry, "entry range").to.exist;
+					expect(rangeEntry!.offset).to.be.closeTo(offset, 0.0001);
+					expect(rangeEntry!.factor).to.equal(1); // mininum unit of length
 				};
 
 				const checkUnreplication = async (db: EventStore<string, any>) => {
@@ -740,6 +744,17 @@ describe(`replicate`, () => {
 				};
 
 				const added = await db1.add("data", { replicate: true });
+				const entryOffset = Number(await db1.log.domain.fromEntry(added.entry));
+				const maxOffset = Number(db1.log.indexableDomain.numbers.maxValue);
+				startOffset =
+					entryOffset + startFactor + 1 < maxOffset
+						? entryOffset + 1
+						: entryOffset - startFactor - 1;
+				await db1.log.replicate({
+					factor: startFactor,
+					offset: startOffset,
+					normalized: false,
+				});
 
 				await checkReplication(db1, added.entry);
 				await waitForResolved(async () => checkReplication(db2, added.entry));

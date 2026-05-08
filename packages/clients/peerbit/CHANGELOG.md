@@ -313,6 +313,176 @@
     * @peerbit/pubsub bumped from ^3.0.4 to ^3.0.5
     * @peerbit/blocks bumped from ^2.0.31 to ^2.0.32
 
+## [5.2.18](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.17...peerbit-v5.2.18) (2026-05-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.8
+    * @peerbit/program bumped to 6.0.29
+    * @peerbit/pubsub bumped to 5.2.10
+
+## [5.2.17](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.16...peerbit-v5.2.17) (2026-05-04)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.7
+    * @peerbit/program bumped to 6.0.28
+    * @peerbit/pubsub bumped to 5.2.9
+
+## [5.2.16](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.15...peerbit-v5.2.16) (2026-05-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.6
+    * @peerbit/program bumped to 6.0.27
+    * @peerbit/pubsub bumped to 5.2.8
+
+## [5.2.15](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.14...peerbit-v5.2.15) (2026-05-02)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.5
+    * @peerbit/program bumped to 6.0.26
+    * @peerbit/pubsub bumped to 5.2.7
+
+## [5.2.14](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.13...peerbit-v5.2.14) (2026-05-01)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.4
+    * @peerbit/program bumped to 6.0.25
+    * @peerbit/pubsub bumped to 5.2.6
+    * @peerbit/stream-interface bumped to 6.0.9
+
+## [5.2.13](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.12...peerbit-v5.2.13) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.24
+    * @peerbit/pubsub bumped to 5.2.5
+
+## [5.2.12](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.11...peerbit-v5.2.12) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.23
+    * @peerbit/pubsub bumped to 5.2.4
+
+## [5.2.11](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.10...peerbit-v5.2.11) (2026-04-30)
+
+
+### Bug Fixes
+
+* **stream:** materialize list-like message payloads ([#749](https://github.com/dao-xyz/peerbit/issues/749)) ([2464485](https://github.com/dao-xyz/peerbit/commit/246448591b7437c4597ae712cdce0eb00eff20dc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.3
+    * @peerbit/program bumped to 6.0.22
+    * @peerbit/pubsub bumped to 5.2.3
+    * @peerbit/stream-interface bumped to 6.0.8
+
+## [5.2.10](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.9...peerbit-v5.2.10) (2026-04-30)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.21
+    * @peerbit/pubsub bumped to 5.2.2
+
+## [5.2.9](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.8...peerbit-v5.2.9) (2026-04-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.2
+    * @peerbit/program bumped to 6.0.20
+    * @peerbit/pubsub bumped to 5.2.1
+
+## [5.2.8](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.7...peerbit-v5.2.8) (2026-04-28)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.1
+    * @peerbit/program bumped to 6.0.19
+
+## [5.2.7](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.6...peerbit-v5.2.7) (2026-04-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/blocks bumped to 4.1.0
+    * @peerbit/program bumped to 6.0.18
+    * @peerbit/pubsub bumped to 5.2.0
+
+## [5.2.6](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.5...peerbit-v5.2.6) (2026-04-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/program bumped to 6.0.17
+    * @peerbit/pubsub bumped to 5.1.6
+
+## [5.2.5](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.4...peerbit-v5.2.5) (2026-03-30)
+
+
+### Bug Fixes
+
+* **packages:** normalize npm metadata for released modules ([#702](https://github.com/dao-xyz/peerbit/issues/702)) ([bc77b1d](https://github.com/dao-xyz/peerbit/commit/bc77b1d196f86d3783050903e85bef720d703cf2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @peerbit/any-store bumped to 2.2.9
+    * @peerbit/any-store-opfs bumped to 1.1.7
+    * @peerbit/blocks bumped to 4.0.11
+    * @peerbit/crypto bumped to 3.1.1
+    * @peerbit/indexer-interface bumped to 3.0.3
+    * @peerbit/indexer-simple bumped to 1.2.6
+    * @peerbit/indexer-sqlite3 bumped to 3.0.6
+    * @peerbit/keychain bumped to 1.2.9
+    * @peerbit/logger bumped to 2.0.1
+    * @peerbit/program bumped to 6.0.16
+    * @peerbit/pubsub bumped to 5.1.5
+    * @peerbit/stream-interface bumped to 6.0.7
+
 ## [5.2.4](https://github.com/dao-xyz/peerbit/compare/peerbit-v5.2.3...peerbit-v5.2.4) (2026-03-29)
 
 

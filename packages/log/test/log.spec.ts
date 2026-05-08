@@ -99,6 +99,40 @@ describe("properties", function () {
 			assert.deepStrictEqual(entry, undefined);
 		});
 
+		it("rechecks storage after a previous miss", async () => {
+			const sourceStore = new AnyBlockStore();
+			const targetStore = new AnyBlockStore();
+			await Promise.all([sourceStore.start(), targetStore.start()]);
+
+			const sourceLog = new Log<string>();
+			const targetLog = new Log<string>();
+			try {
+				await sourceLog.open(sourceStore, signKey, {
+					encoding: JSON_ENCODING,
+				});
+				await targetLog.open(targetStore, signKey, {
+					encoding: JSON_ENCODING,
+				});
+
+				const { entry } = await sourceLog.append("late");
+				const encodedEntry = await sourceStore.get(entry.hash);
+				expect(encodedEntry).to.exist;
+
+				expect(await targetLog.get(entry.hash)).to.equal(undefined);
+				expect(await targetStore.put(encodedEntry!)).to.equal(entry.hash);
+
+				const resolved = await targetLog.get(entry.hash);
+				expect(await resolved?.getPayloadValue()).to.equal("late");
+			} finally {
+				await Promise.all([
+					sourceLog.close(),
+					targetLog.close(),
+					sourceStore.stop(),
+					targetStore.stop(),
+				]);
+			}
+		});
+
 		it("does not fetch from remotes by if missing block by default", async () => {
 			const storeGetFn = store.get.bind(store);
 			let remoteFetchOptions: any = undefined;
@@ -120,10 +154,13 @@ describe("properties", function () {
 
 		it("fetches remotes with timeout", async () => {
 			const storeGetFn = store.get.bind(store);
-			let timeout: any = undefined;
+			let timeout: number | undefined;
 			let fetched = false;
 			store.get = async (hash, options) => {
-				timeout = (options?.remote as any)?.["timeout"];
+				timeout =
+					typeof options?.remote === "object"
+						? options.remote.timeout
+						: undefined;
 				fetched = true;
 				return storeGetFn(hash, options);
 			};
@@ -142,12 +179,56 @@ describe("properties", function () {
 			expect(timeout).to.eq(123);
 		});
 
+		it("fetches remote entries with metadata priority by default", async () => {
+			const storeGetFn = store.get.bind(store);
+			let priority: number | undefined;
+			store.get = async (hash, options) => {
+				priority =
+					typeof options?.remote === "object"
+						? options.remote.priority
+						: undefined;
+				return storeGetFn(hash, options);
+			};
+
+			const entry = await log.get(
+				"zb2rhbnwihVVVVEGAPf9EwTZBsQz9fszCnM4Y8mJmBFgiyN7J",
+				{ remote: true },
+			);
+			assert.deepStrictEqual(entry, undefined);
+			expect(priority).to.eq(2);
+		});
+
+		it("preserves explicit remote entry priority", async () => {
+			const storeGetFn = store.get.bind(store);
+			let priority: number | undefined;
+			store.get = async (hash, options) => {
+				priority =
+					typeof options?.remote === "object"
+						? options.remote.priority
+						: undefined;
+				return storeGetFn(hash, options);
+			};
+
+			const entry = await log.get(
+				"zb2rhbnwihVVVVEGAPf9EwTZBsQz9fszCnM4Y8mJmBFgiyN7J",
+				{ remote: { timeout: 123, priority: 1 } },
+			);
+			assert.deepStrictEqual(entry, undefined);
+			expect(priority).to.eq(1);
+		});
+
 		it("injects remote.from when resolveRemotePeers is configured", async () => {
 			const fromPeers = ["peer-a", "peer-b", "peer-c"];
 			const storeGetFn = store.get.bind(store);
-			let observedFrom: any = undefined;
+			let observedFrom: string[] | undefined;
+			let observedPriority: number | undefined;
 			store.get = async (hash, options) => {
-				observedFrom = (options?.remote as any)?.from;
+				observedFrom =
+					typeof options?.remote === "object" ? options.remote.from : undefined;
+				observedPriority =
+					typeof options?.remote === "object"
+						? options.remote.priority
+						: undefined;
 				return storeGetFn(hash, options);
 			};
 
@@ -164,6 +245,7 @@ describe("properties", function () {
 			);
 			assert.deepStrictEqual(entry, undefined);
 			expect(observedFrom).to.deep.equal(fromPeers);
+			expect(observedPriority).to.eq(2);
 		});
 	});
 
